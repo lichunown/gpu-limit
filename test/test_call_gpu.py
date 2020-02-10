@@ -23,7 +23,7 @@ with open('./Resources', 'r') as f:
         data.append((id, free))
 
 
-with open('./Resources', 'w') as f:
+with open('./test/Resources', 'w') as f:
     f.write('\n'.join([f'{id}:{free}' for id, free in data]))
 
 time.sleep(sleep)

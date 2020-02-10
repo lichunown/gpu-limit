@@ -1,72 +1,79 @@
 #! /usr/bin/python3
 import os
 import time
-
+import pickle as pk
 
 import socket
-from gpulimit_core.socket_utils import send_all, recv_all
+from gpulimit_core.socket_utils import recv_all, send_all_str
 from gpulimit_core.task_mutiprocess import TaskQueue
 
 msg = '''
 GPU Task Manage Client:
     usage:
+        
+        client.py -h                  show help
+        gpulimit add [cmds]           add task [cmds] to gpulimit queue.
+        
 
-        client.py cmd arg1, arg2, ...
-        client.py [-h]
-
-    optional arguments:
-        -h          show help
-        -ls         ls GPU task queue status
-        -rm [id]    del task [id]
-        -f [id]     move [id] to the first
-        -show [id]  show [id] output.
-        -clean      remove complete task and CMD_ERROR task.
+    other commands:
+        help                          show help
+        ls                            ls GPU task queue status
+        rm [id]                       del task [id]
+        kill [id]                     kill task
+        move [id] [index(default=0)]  move [id] to the first
+        log [id]                      show [id] output.
+        clean [type(default=None)]    remove complete task and CMD_ERROR task.
+        
+        set [name] [value]            set some property.
 '''
 def return_help(*args):
     return 0, msg
 
 
+def create_task(sock, pwd, cmds, task_queue):
+    _, result = task_queue.add(pwd, cmds)
+    send_all_str(sock, result)
+    
+
 def process_commands(sock, pwd, cmds, task_queue):
     func_map = {
-        '-h': return_help,
-        '--help': return_help,
+        '-h': (return_help, (0,)),
+        '--help': (return_help, (0,)),
+        'help': (return_help, (0,)),
+        
+        'ls': (task_queue.ls, (0,)),
+        
+        'kill': (task_queue.kill, (1,)),
+        
+        'rm': (task_queue.rm, (1,)),
 
-        '-l': task_queue.ls,
-        '-ls': task_queue.ls,
-        '--ls': task_queue.ls,
+        'move': (task_queue.move_to_top, (1,2)),
 
-        '-rm': task_queue.rm,
-        '--rm': task_queue.rm,
+        'log': (task_queue.get_output_filename, (1,)),
 
-        '-f': task_queue.move_to_top,
-        '--move-to-top': task_queue.move_to_top,
-
-        '--show': task_queue.get_output_filename,
-        '-show': task_queue.get_output_filename,
-        '-s': task_queue.get_output_filename,
-
-        '--clean': task_queue.clean,
-        '-clean': task_queue.clean,
+        'clean': (task_queue.clean, tuple(range(10))),
+        
+        'set': (task_queue.set_property, (2,)),
     }
+    
     if func_map.get(cmds[0]):
-        _, return_msg = func_map[cmds[0]](*cmds[1:])
+        func, arg_nums = func_map[cmds[0]]
+        if len(cmds[1:]) in arg_nums:
+            _, return_msg = func(*cmds[1:])
+        else:
+            return_msg = f'{cmds[0]} can have {arg_nums} nums args, but you input {len(cmds[1:])} args.'
     else:
-        return_msg = 'Error: no cmd found.'
-    send_all(sock, return_msg)
-
-def create_task(sock, pwd, cmds, task_queue):
-    _, result = task_queue.add(pwd, ' '.join(cmds))
-    send_all(sock, result)
+        return_msg = '[error]: no cmd found.'
+    send_all_str(sock, return_msg)
 
 def process(sock, task_queue):
     msgs = recv_all(sock)
-    pwd = msgs.split('|')[0]
-    cmds = '|'.join(msgs.split('|')[1:])
-    cmds = cmds.split()
-    if cmds[0].startswith('-'):
-        process_commands(sock, pwd, cmds, task_queue)
+    pwd, cmds = pk.loads(msgs)
+    
+    if cmds[0] == 'add':
+        create_task(sock, pwd, cmds[1:], task_queue)
     else:
-        create_task(sock, pwd, cmds, task_queue)
+        process_commands(sock, pwd, cmds, task_queue)
 
 
 
@@ -78,7 +85,7 @@ if __name__=='__main__':
         if os.path.exists(server_address):
             raise RuntimeError('server is running.')
 
-    task_queue = TaskQueue(logdir='/tmp/', CHECK_INT=10, MINI_MEM_REMAIN=1024)
+    task_queue = TaskQueue(logdir='/tmp/', MINI_MEM_REMAIN=1024)
     sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     sock.bind(server_address)
     sock.listen(5)

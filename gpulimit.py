@@ -1,7 +1,8 @@
 #! /usr/bin/python3
 
 import sys, socket, os
-from gpulimit_core.socket_utils import send_all, recv_all
+import pickle as pk
+from gpulimit_core.socket_utils import send_all, recv_all_str
 
 
 server_address = '/tmp/gpulimit_uds_socket'
@@ -21,19 +22,20 @@ def show_help():
 
 if __name__=='__main__':
     if len(sys.argv) == 1:
-        show_help()
+        print(f'use `{sys.argv[0]} help` to show help message.')
         exit(0)
     sock = connect()
     pwd = os.getcwd()
-    cmds = ' '.join(sys.argv[1:])
-    send_msg = '|'.join([pwd, cmds])
-    send_all(sock, send_msg)
-    result = recv_all(sock)
+    
+    send_all(sock, pk.dumps([pwd, sys.argv[1:]]))
+    result = recv_all_str(sock)
     sock.close()
-    print(result)
+    print(f'{result}')
 
-    if cmds.startswith('-show'):
+    if sys.argv[1] == 'log':
         if result != 'Error':
             os.system(f'less {result}')
+        else:
+            print('[error]: please check task id.')
     
     
