@@ -6,7 +6,7 @@ import logging
 from collections import namedtuple
 
 
-#os.environ['GPULIMIT_DEBUG'] = '1'
+os.environ['GPULIMIT_DEBUG'] = '1'
                 
 GPUInfo = namedtuple('GPUInfo', ('id','memory_total', 'memory_free', 'memory_used'))
 
@@ -49,13 +49,12 @@ def get_use_gpu_test():
 
 
 if os.environ.get('GPULIMIT_DEBUG'):
-    if os.environ.get('GPULIMIT_DEBUG'):
-        logging.warning('[warning]: here use debug environment. NO GPU USE!!!')
-        get_gpu_info = get_gpu_info_test
-        get_use_gpu = get_use_gpu_test
-    else:
-        get_gpu_info = _get_gpu_info
-        get_use_gpu = _get_use_gpu
+    logging.warning('here use debug environment. NO GPU USE!!!')
+    get_gpu_info = get_gpu_info_test
+    get_use_gpu = get_use_gpu_test
+else:
+    get_gpu_info = _get_gpu_info
+    get_use_gpu = _get_use_gpu
 
 
 class TaskStatus(object):
@@ -212,9 +211,13 @@ class TaskQueue(object):
         self.id_give = 0
         self.logdir = logdir
         self.log_file = os.path.join(self.logdir, 'main.log')
-
-        logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
-        logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
+        
+        if os.environ['GPULIMIT_DEBUG']:
+            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
+            logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(message)s')
+        else:
+            logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
+            logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
 
         # del logfiles in log dir
         for logname in os.listdir(self.logdir):
