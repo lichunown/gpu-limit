@@ -1,6 +1,8 @@
 import subprocess
 import os, time
 import threading
+import logging
+
 from collections import namedtuple
 
 
@@ -48,7 +50,7 @@ def get_use_gpu_test():
 
 if os.environ.get('GPULIMIT_DEBUG'):
     if os.environ.get('GPULIMIT_DEBUG'):
-        print('[warning]: here use debug environment. NO GPU USE!!!')
+        logging.warning('[warning]: here use debug environment. NO GPU USE!!!')
         get_gpu_info = get_gpu_info_test
         get_use_gpu = get_use_gpu_test
     else:
@@ -149,14 +151,14 @@ class Task(object):
         env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
         try:
             self.process = subprocess.Popen(self.cmds, stdout=self.out_file, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
-            print(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
+            logging.info(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         except Exception as e:
             self.available = False
-            print(f'[CMD_ERROR({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
+            logging.info(f'[CMD_ERROR({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds} \nerror:\n{e}')
             self.task_queue.check_and_start()
             return
         self.process.wait()
-        print(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
+        logging.info(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         
         self.task_queue.check_and_start()
 
@@ -209,7 +211,11 @@ class TaskQueue(object):
         self.queue = []
         self.id_give = 0
         self.logdir = logdir
-        
+        self.log_file = os.path.join(self.logdir, 'main.log')
+
+        logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
+        logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
+
         # del logfiles in log dir
         for logname in os.listdir(self.logdir):
             path = os.path.join(logdir, logname) 
@@ -226,7 +232,7 @@ class TaskQueue(object):
         self.id_give += 1
         self.queue.append(task)
         result = f'add task(id:{task.id}) to queue(len: {len(self.queue)})'
-        print(f'add task(id:{task.id}): {pwd}$ {cmds})')
+        logging.info(f'add task(id:{task.id}): {pwd}$ {cmds})')
         err, result_ = self.check_and_start()
         return err, '\n'.join([result, result_])
 
@@ -319,7 +325,7 @@ class TaskQueue(object):
         if not result:
             errcode = 0
             result = 'running queue is full. please use `ls` check status.'
-        print(result)
+        logging.info(result)
         return errcode, result
 
     def clean(self, *args):
@@ -350,10 +356,12 @@ class TaskQueue(object):
             result = 0, f'[info]: set {name}={value}'
         else:
             result = 1, f'[error]: name `{name}` can not set.'
-        print(result[1])
+        logging.info(result[1])
         return result
         
     def get_output_filename(self, id):
+        if id=='main':
+            return 0, self.log_file
         try:
             id = int(id)
         except Exception as e:
