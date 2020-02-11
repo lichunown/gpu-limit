@@ -3,3 +3,6 @@ __pycache__/
 test/tmp/
 tmp/
 .spyproject/
+build/
+dist/
+gpulimit.egg-info/

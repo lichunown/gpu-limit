@@ -1,3 +1,0 @@
-#! /bin/bash
-
-python3 $(cd "$(dirname "$0")";pwd)/gpulimit_server.py $*

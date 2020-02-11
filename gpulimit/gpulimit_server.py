@@ -76,8 +76,7 @@ def process(sock, task_queue):
         process_commands(sock, pwd, cmds, task_queue)
 
 
-
-if __name__=='__main__':
+def main():
     server_address = '/tmp/gpulimit_uds_socket'
     try:
         os.unlink(server_address)
@@ -94,3 +93,7 @@ if __name__=='__main__':
         connection, client_address = sock.accept()
         process(connection, task_queue)
         connection.close()
+
+
+if __name__=='__main__':
+    main()

@@ -20,7 +20,7 @@ def connect():
 def show_help():
     print('help: this is help')
 
-if __name__=='__main__':
+def main():
     if len(sys.argv) == 1:
         print(f'use `{sys.argv[0]} help` to show help message.')
         exit(0)
@@ -37,5 +37,6 @@ if __name__=='__main__':
             os.system(f'less {result}')
         else:
             print('[error]: please check task id.')
-    
-    
+
+if __name__=='__main__':
+    main()
