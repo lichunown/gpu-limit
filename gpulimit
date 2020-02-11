@@ -1,2 +1,2 @@
 #! /bin/bash
-python3 ./gpulimit.py $*
+python3 $(cd "$(dirname "$0")";pwd)/gpulimit.py $*
