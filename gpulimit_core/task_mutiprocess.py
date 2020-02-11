@@ -6,7 +6,7 @@ import logging
 from collections import namedtuple
 
 
-os.environ['GPULIMIT_DEBUG'] = '1'
+#os.environ['GPULIMIT_DEBUG'] = '1'
                 
 GPUInfo = namedtuple('GPUInfo', ('id','memory_total', 'memory_free', 'memory_used'))
 
