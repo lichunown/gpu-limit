@@ -212,22 +212,35 @@ class TaskQueue(object):
         self.logdir = logdir
         self.log_file = os.path.join(self.logdir, 'main.log')
         
-        if os.environ['GPULIMIT_DEBUG']:
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
+        else:
+            # del logfiles in log dir
+            for logname in os.listdir(self.logdir):
+                path = os.path.join(logdir, logname) 
+                if os.path.isfile(path):
+                    os.remove(path)
+
+        if os.environ.get('GPULIMIT_DEBUG'):
             logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
             logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(message)s')
         else:
             logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
             logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
 
-        # del logfiles in log dir
-        for logname in os.listdir(self.logdir):
-            path = os.path.join(logdir, logname) 
-            if os.path.isfile(path):
-                os.remove(path)
 
         self.MINI_MEM_REMAIN = MINI_MEM_REMAIN
         self.MAX_ERR_TIMES = MAX_ERR_TIMES
-        
+    
+    @staticmethod
+    def _check_input(input, dtype=int):
+        try:
+            input = dtype(input)
+        except Exception as e:
+            err_msg = f'[error]: input {input} is not type({dtype.__name__})'
+            return None, err_msg
+        return input, ''
+    
     def add(self, pwd, cmds, logpath=None):
         if logpath is None:
             logpath = os.path.join(self.logdir, f'{self.id_give}.log')
@@ -254,10 +267,9 @@ class TaskQueue(object):
 
     def rm(self, id):
         result = ''
-        try:
-            id = int(id)
-        except Exception as e:
-            return 1, str(e)
+        id, err = self._check_input(id)
+        if id is None:
+            return 1, err
         for i, task in enumerate(self.queue):
             if task.id == id:
                 if str(self.queue[i].status) == 'running':
@@ -271,10 +283,9 @@ class TaskQueue(object):
             return 0, result
 
     def kill(self, id):
-        try:
-            id = int(id)
-        except Exception as e:
-            return 1, str(e)
+        id, err = self._check_input(id)
+        if id is None:
+            return 1, err
         for i, task in enumerate(self.queue):
             if task.id == id:
                 return task.kill()
@@ -361,7 +372,24 @@ class TaskQueue(object):
             result = 1, f'[error]: name `{name}` can not set.'
         logging.info(result[1])
         return result
-        
+    
+    def start(self, id=None):
+        if id is None:
+            return self.check_and_start()
+        try:
+            id = int(id)
+        except Exception as e:
+            return 1, str(e)
+        use_gpu = get_use_gpu()
+        for task in self.queue:
+            if task.id == id:
+                if task.status.status in [ 'waiting', 'runtime_error']:
+                    task.allow_gpu = use_gpu.memory_free
+                    return self.run_task(task)
+                else:
+                    return 0, f'[error]: task[{id}] is in {task.status.status} status, can not start.'
+        return 0, f'[error]: can not found task[{id}]'
+                
     def get_output_filename(self, id):
         if id=='main':
             return 0, self.log_file
