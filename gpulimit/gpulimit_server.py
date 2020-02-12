@@ -1,5 +1,5 @@
 #! /usr/bin/python3
-import os
+import os, sys
 import time
 import pickle as pk
 
@@ -45,6 +45,8 @@ def process_commands(sock, pwd, cmds, task_queue):
         
         'kill': (task_queue.kill, (1,)),
         
+        'start': (task_queue.start, (0,1,)),
+        
         'rm': (task_queue.rm, (1,)),
 
         'move': (task_queue.move_to_top, (1,2)),
@@ -77,18 +79,28 @@ def process(sock, task_queue):
 
 
 def main():
-    server_address = '/tmp/gpulimit_uds_socket'
-    try:
-        os.unlink(server_address)
-    except OSError:
-        if os.path.exists(server_address):
-            raise RuntimeError('server is running.')
-
-    task_queue = TaskQueue(logdir='/tmp/', MINI_MEM_REMAIN=1024)
-    sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    if sys.platform == 'linux':
+        server_address = '/tmp/gpulimit_uds_socket'
+        try:
+            os.unlink(server_address)
+        except OSError:
+            if os.path.exists(server_address):
+                raise RuntimeError('server is running.')
+    else:
+        server_address = ('0.0.0.0', 5123)
+        
+    if sys.platform == 'linux':
+        task_queue = TaskQueue(logdir='/tmp/', MINI_MEM_REMAIN=1024)
+    else:
+        task_queue = TaskQueue(logdir='./tmp/', MINI_MEM_REMAIN=1024)
+    if isinstance(server_address, str):
+        sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+    else:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sock.bind(server_address)
     sock.listen(5)
-
+    print('start gpulimit server.')
+    print(f'listening at {server_address}')
     while True:
         connection, client_address = sock.accept()
         process(connection, task_queue)
