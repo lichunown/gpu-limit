@@ -278,6 +278,9 @@ class TaskQueue(object):
         return errcode, result
 
     def ls(self):
+        '''
+        ls                            ls GPU task queue status
+        '''
         self._sort_priority('show')
         result = f'TaskQueue MINI_MEM_REMAIN={self.MINI_MEM_REMAIN}, MAX_ERR_TIMES={self.MAX_ERR_TIMES}\n'
         result += '[ID]\tnum\t|\tstatus\trun_times\tcmds\n'
@@ -286,6 +289,9 @@ class TaskQueue(object):
         return 0, result
 
     def rm(self, id):
+        '''
+        rm [id]                       del task [id]
+        '''
         (id,), err_msg = self._check_input(((id, int),))
         if err_msg:
             return 1, err_msg
@@ -304,6 +310,10 @@ class TaskQueue(object):
             return 0, result
 
     def kill(self, id):
+        '''
+        kill [id]                     kill task
+        '''
+        
         (id,), err_msg = self._check_input(((id, int),))
         if err_msg:
             return 1, err_msg
@@ -314,6 +324,9 @@ class TaskQueue(object):
         return 1, f'[error]: can not found id {id} in task queue.'
         
     def move_to_top(self, id, index=0, *args, **kwargs):
+        '''
+        move [id] [index(default=0)]  move [id] to the first
+        '''
         (id, index), err_msg = self._check_input(((id, int),(index, int)), args, kwargs)
         if err_msg:
             return 1, err_msg
@@ -364,6 +377,9 @@ class TaskQueue(object):
         return errcode, result
 
     def clean(self, *args):
+        '''
+        clean [type(default=None)]    remove complete task and CMD_ERROR task.
+        '''
         if not args:
             rm_types = ['CMD_ERROR', 'complete']
         else:
@@ -381,6 +397,10 @@ class TaskQueue(object):
         return 0, '\n'.join([f'[info]: rm ID({id_})  {pwd}# {cmds}' for id_, pwd, cmds in zip(rm_ids, rm_pwds, rm_cmds)])
 
     def set_property(self, name, value):
+        '''
+        set [name] [value]            set some property.
+        '''
+        
         name2type = {
             'MINI_MEM_REMAIN': int, 
             'MAX_ERR_TIMES': int,
@@ -412,6 +432,10 @@ class TaskQueue(object):
         return 0, f'[error]: can not found task[{id}]'
                 
     def get_output_filename(self, id):
+        '''
+        log [id]                      show [id] output.
+        '''
+        
         if id=='main':
             return 0, self.log_file
         
