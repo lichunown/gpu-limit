@@ -238,14 +238,28 @@ class TaskQueue(object):
         self.MINI_MEM_REMAIN = MINI_MEM_REMAIN
         self.MAX_ERR_TIMES = MAX_ERR_TIMES
     
+    
     @staticmethod
-    def _check_input(input, dtype=int):
-        try:
-            input = dtype(input)
-        except Exception as e:
-            err_msg = f'[error]: input {input} is not type({dtype.__name__})'
-            return None, err_msg
-        return input, ''
+    def _check_input(input_types, extra_args=(), extra_kwargs={}):
+        '''
+        Example:
+            
+            input_types = (('1', int), ('start', str))
+        '''
+        err_msg = ''
+        result_input = []
+        for value, dtype in input_types:
+            try:
+                result_input.append(dtype(value))
+            except Exception as e:
+                result_input.append(None)
+                err_msg += f'[error]: input {value} is not type `{dtype.__name__}`.\n'
+        for v in extra_args:
+            err_msg += f'[error]: can not identify param `{v}`.\n'
+        for k, v in extra_kwargs:
+            err_msg += f'[error]: can not identify param `{k}={v}`.\n'
+            
+        return result_input, err_msg
     
     def add(self, pwd, cmds, logpath=None):
         if logpath is None:
@@ -272,10 +286,11 @@ class TaskQueue(object):
         return 0, result
 
     def rm(self, id):
+        (id,), err_msg = self._check_input(((id, int),))
+        if err_msg:
+            return 1, err_msg
+        
         result = ''
-        id, err = self._check_input(id)
-        if id is None:
-            return 1, err
         for i, task in enumerate(self.queue):
             if task.id == id:
                 if str(self.queue[i].status) == 'running':
@@ -289,20 +304,20 @@ class TaskQueue(object):
             return 0, result
 
     def kill(self, id):
-        id, err = self._check_input(id)
-        if id is None:
-            return 1, err
+        (id,), err_msg = self._check_input(((id, int),))
+        if err_msg:
+            return 1, err_msg
+        
         for i, task in enumerate(self.queue):
             if task.id == id:
                 return task.kill()
         return 1, f'[error]: can not found id {id} in task queue.'
         
-    def move_to_top(self, id, index=0):
-        try:
-            id = int(id)
-            index = int(index)
-        except Exception as e:
-            return 1, str(e)
+    def move_to_top(self, id, index=0, *args, **kwargs):
+        (id, index), err_msg = self._check_input(((id, int),(index, int)), args, kwargs)
+        if err_msg:
+            return 1, err_msg
+        
         if index > len(self.queue):
             return 2, f'[error]: index {index} is bigger than task queue length({len(self.queue)})'
         
@@ -382,10 +397,10 @@ class TaskQueue(object):
     def start(self, id=None):
         if id is None:
             return self.check_and_start()
-        try:
-            id = int(id)
-        except Exception as e:
-            return 1, str(e)
+        (id, ), err_msg = self._check_input(((id, int),), )
+        if err_msg:
+            return 1, err_msg
+        
         use_gpu = get_use_gpu()
         for task in self.queue:
             if task.id == id:
@@ -399,10 +414,11 @@ class TaskQueue(object):
     def get_output_filename(self, id):
         if id=='main':
             return 0, self.log_file
-        try:
-            id = int(id)
-        except Exception as e:
-            return 1, str(e)
+        
+        (id, ), err_msg = self._check_input(((id, int),), )
+        if err_msg:
+            return 1, err_msg
+        
         path = ''
         for i, task in enumerate(self.queue):
             if id == task.id:
