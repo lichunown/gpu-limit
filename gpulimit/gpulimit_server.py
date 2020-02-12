@@ -5,7 +5,8 @@ import pickle as pk
 
 import socket
 from gpulimit_core.socket_utils import recv_all, send_all_str
-from gpulimit_core.task_mutiprocess import TaskQueue
+from gpulimit_core.task_mutiprocess import TaskQueue, _get_gpu_info
+
 
 msg = '''
 GPU Task Manage Client:

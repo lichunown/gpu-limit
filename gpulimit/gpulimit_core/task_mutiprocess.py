@@ -48,6 +48,12 @@ def get_use_gpu_test():
     return max_free_memory_gpu
 
 
+if not os.environ.get('GPULIMIT_DEBUG'):
+    if not _get_gpu_info():
+        print('[Warning]: can not use `nvidia-smi`, please check cuda environment.')
+        print('[info]: set GPULIMIT_DEBUG=1.')
+        os.environ['GPULIMIT_DEBUG'] = '1'
+
 if os.environ.get('GPULIMIT_DEBUG'):
     logging.warning('here use debug environment. NO GPU USE!!!')
     get_gpu_info = get_gpu_info_test
