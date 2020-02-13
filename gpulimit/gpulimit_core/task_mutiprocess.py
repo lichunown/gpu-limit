@@ -9,7 +9,7 @@ from queue import Queue
 try:
     import prettytable as pt
 except ModuleNotFoundError:
-    from ..utils.prettytable import prettytable as pt
+    from utils import prettytable as pt
 
 #os.environ['GPULIMIT_DEBUG'] = '1'
                 
@@ -67,6 +67,16 @@ else:
     get_gpu_info = _get_gpu_info
     get_use_gpu = _get_use_gpu
 
+
+class SystemStatus(object):
+    @staticmethod
+    def gpu_info():
+        pass
+    
+    def allow_gpus(self, min_free=1024):
+        pass
+    
+        
 
 class TaskStatus(object):
     status2id = dict(zip(['CMD_ERROR', 'complete', 'waiting', 'running', 'runtime_error', 'killed'], range(-1, 5)))
@@ -220,7 +230,7 @@ class Task(object):
 
 
 class TaskQueue(object):
-    def __init__(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=50, WAIT_TIME=10):
+    def __init__(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=5, WAIT_TIME=10):
         self.queue = []
         self.id_give = 0
         self.logdir = logdir
@@ -322,7 +332,7 @@ class TaskQueue(object):
 
     def rm(self, id):
         '''
-        rm [id]                       del task [id]
+        rm [id]                       remove task [id] from manage, if task is running, kill it.
         '''
         (id,), err_msg = self._check_input(((id, int),))
         if err_msg:
@@ -345,7 +355,7 @@ class TaskQueue(object):
 
     def kill(self, id):
         '''
-        kill [id]                     kill task
+        kill [id]                     kill task [id]
         '''
         
         (id,), err_msg = self._check_input(((id, int),))
@@ -359,7 +369,7 @@ class TaskQueue(object):
         
     def move_to_top(self, id, index=0, *args, **kwargs):
         '''
-        move [id] [index(default=0)]  move [id] to the first
+        move [id] [index(default=0)]  move [id] to [index]
         '''
         (id, index), err_msg = self._check_input(((id, int),(index, int)), args, kwargs)
         if err_msg:
@@ -421,6 +431,11 @@ class TaskQueue(object):
     def clean(self, *args):
         '''
         clean [type(default=None)]    remove complete task and CMD_ERROR task.
+        
+        Example:
+            
+            gpulimit clean            clean all `CMD_ERROR` `complete` status task
+            gpulimit clean kill       clean all `kill` status task
         '''
         if not args:
             rm_types = ['CMD_ERROR', 'complete']
@@ -442,6 +457,10 @@ class TaskQueue(object):
     def set_property(self, name, value):
         '''
         set [name] [value]            set some property.
+        
+        Example:
+            
+            gpulimit set WAIT_TIME 1  set `WAIT_TIME=1`
         '''
         
         name2type = {
@@ -478,6 +497,11 @@ class TaskQueue(object):
     def get_output_filename(self, id):
         '''
         log [id]                      show [id] output.
+        
+        Example:
+            
+            gpulimit log 1            show task(id=1) output.
+            gpulimit log main         show manage background log info.
         '''
         
         if id=='main':
