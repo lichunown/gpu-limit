@@ -3,8 +3,9 @@ import os, time
 import threading
 import logging
 
+import prettytable as pt
 from collections import namedtuple
-
+from queue import Queue
 
 #os.environ['GPULIMIT_DEBUG'] = '1'
                 
@@ -66,6 +67,9 @@ else:
 class TaskStatus(object):
     status2id = dict(zip(['CMD_ERROR', 'complete', 'waiting', 'running', 'runtime_error', 'killed'], range(-1, 5)))
     id2status = dict(zip(status2id.values(), status2id.keys()))
+    
+    can_start_list = ['waiting', 'runtime_error', 'killed']
+    auto_start_list = ['waiting', 'runtime_error']
     
     start_sort_type = {
         'waiting': 0,
@@ -212,7 +216,7 @@ class Task(object):
 
 
 class TaskQueue(object):
-    def __init__(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=50):
+    def __init__(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=50, WAIT_TIME=10):
         self.queue = []
         self.id_give = 0
         self.logdir = logdir
@@ -237,7 +241,22 @@ class TaskQueue(object):
 
         self.MINI_MEM_REMAIN = MINI_MEM_REMAIN
         self.MAX_ERR_TIMES = MAX_ERR_TIMES
-    
+        self.WAIT_TIME = WAIT_TIME
+        
+        self.start_thread = threading.Thread(target=self._thread_start_task)
+        self.need_start_tasks = Queue()
+        self.lock = threading.RLock()
+        self.start_thread.start()
+        
+    def _thread_start_task(self):
+        while True:
+            if not self.need_start_tasks.empty():
+                task = self.need_start_tasks.get()
+                if task.status.status in TaskStatus.can_start_list:
+                    self.run_task(task)
+                    time.sleep(self.WAIT_TIME)
+            else:
+                time.sleep(1)
     
     @staticmethod
     def _check_input(input_types, extra_args=(), extra_kwargs={}):
@@ -256,7 +275,7 @@ class TaskQueue(object):
                 err_msg += f'[error]: input {value} is not type `{dtype.__name__}`.\n'
         for v in extra_args:
             err_msg += f'[error]: can not identify param `{v}`.\n'
-        for k, v in extra_kwargs:
+        for k, v in extra_kwargs.items():
             err_msg += f'[error]: can not identify param `{k}={v}`.\n'
             
         return result_input, err_msg
@@ -277,16 +296,25 @@ class TaskQueue(object):
         errcode, result = task.start(use_gpu.id)   
         return errcode, result
 
-    def ls(self):
+    def ls(self, all=False, *args, **kwargs):
         '''
         ls                            ls GPU task queue status
         '''
+        (all, ), err_msg = self._check_input(((all, bool),), args, kwargs)
+        if err_msg: return 1, err_msg
+        
         self._sort_priority('show')
         result = f'TaskQueue MINI_MEM_REMAIN={self.MINI_MEM_REMAIN}, MAX_ERR_TIMES={self.MAX_ERR_TIMES}\n'
-        result += '[ID]\tnum\t|\tstatus\trun_times\tcmds\n'
+        table = pt.PrettyTable(['[ID]', 'num', 'status', 'run_times', 'pwd', 'cmds'])
+        table.border = False
+#        result += '[ID]\tnum\t|\tstatus\trun_times\tcmds\n'
         for i, task in enumerate(self.queue):
-            result += f'{task.id}\t{i}\t|\t{str(task.status)}\t{task.run_times}\t{task.pwd}# {"".join(task.cmds)}\n'
-        return 0, result
+            if not all:
+                table.add_row([task.id, i, str(task.status), task.run_times, task.pwd+'#', " ".join(task.cmds)[:80]])
+            else:
+                table.add_row([task.id, i, str(task.status), task.run_times, task.pwd+'#', " ".join(task.cmds)])
+#            result += f'{task.id}\t{i}\t|\t{str(task.status)}\t{task.run_times}\t{task.pwd}# {"".join(task.cmds)}\n'
+        return 0, result + str(table)
 
     def rm(self, id):
         '''
@@ -297,6 +325,7 @@ class TaskQueue(object):
             return 1, err_msg
         
         result = ''
+        self.lock.acquire()
         for i, task in enumerate(self.queue):
             if task.id == id:
                 if str(self.queue[i].status) == 'running':
@@ -304,6 +333,7 @@ class TaskQueue(object):
                 del self.queue[i]
                 result += f'[info]: del task {id}'
                 break
+        self.lock.release()
         if not result:
             return 1, f'[error]: can not found {id} in task queue.'
         else:
@@ -340,9 +370,11 @@ class TaskQueue(object):
                 pos = i
                 break
         if pos is not None:
+            self.lock.acquire()
             t = self.queue[pos]
             del self.queue[pos]
             self.queue.insert(index, t)
+            self.lock.release()
             return 0, f'[info]: move {id} to the first'
         else:
             return 1, f'[error]: can not found task {id}'
@@ -355,26 +387,30 @@ class TaskQueue(object):
             sort_type = TaskStatus.show_sort_type
         else:
             raise KeyError
+            
+        self.lock.acquire()
         self.queue = sorted(self.queue, key=lambda x: x.id)
         self.queue = sorted(self.queue, key=lambda x: sort_type[x.status.status])
+        self.lock.release()
 
     def check_and_start(self): 
-        time.sleep(0.5)
         gpu_info = get_gpu_info()
         result = ''
         if any(map(lambda x: x.memory_free > self.MINI_MEM_REMAIN, gpu_info)):
+            self.lock.acquire()
             self._sort_priority('start')
-            use_gpu = get_use_gpu()
             for task in self.queue:
-                if task.status.status in [ 'waiting', 'runtime_error']:
-                    task.allow_gpu = use_gpu.memory_free
-                    errcode, result = self.run_task(task)
+                if task.status.status in TaskStatus.auto_start_list:
+                    self.need_start_tasks.put(task)
+                    result += f'[info]: starting task {task.id}.'
                     break
+            self.lock.release()
+        else:
+            result = 'GPU memory is full. task is waitting for others.'
         if not result:
-            errcode = 0
-            result = 'running queue is full. please use `ls` check status.'
+            result = f'all task is to be run or completed.'
         logging.info(result)
-        return errcode, result
+        return 0, result
 
     def clean(self, *args):
         '''
@@ -392,8 +428,9 @@ class TaskQueue(object):
             rm_ids.append(task.id)
             rm_cmds.append(task.cmds)
             rm_pwds.append(task.pwd)
-
+        self.lock.acquire()
         self.queue = list(filter(lambda x:x, [None if task.status.status in rm_types else task for task in self.queue]))
+        self.lock.release()
         return 0, '\n'.join([f'[info]: rm ID({id_})  {pwd}# {cmds}' for id_, pwd, cmds in zip(rm_ids, rm_pwds, rm_cmds)])
 
     def set_property(self, name, value):
@@ -404,6 +441,7 @@ class TaskQueue(object):
         name2type = {
             'MINI_MEM_REMAIN': int, 
             'MAX_ERR_TIMES': int,
+            'WAIT_TIME': int,
         }
         if name in name2type:
             value = name2type[name](value)

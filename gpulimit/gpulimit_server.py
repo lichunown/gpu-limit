@@ -10,7 +10,7 @@ from gpulimit_core.task_mutiprocess import TaskQueue, _get_gpu_info
 
 
 """
-GPU Task Manage Server
+GPU Task Manage
 """
 
 
@@ -74,26 +74,28 @@ class Server(object):
         pwd, cmds = pk.loads(msgs)
         
         if cmds[0] == 'add':
-            self._create_task(sock, pwd, cmds[1:])
+            msg = self._create_task(pwd, cmds[1:])
         else:
-            self._process_commands(sock, pwd, cmds)
+            msg = self._process_commands(pwd, cmds)
+
+        send_all_str(sock, msg)
             
-    def _create_task(self, sock, pwd, cmds):
+    def _create_task(self, pwd, cmds):
         _, result = self.task_queue.add(pwd, cmds)
-        send_all_str(sock, result)
+        return result
         
-    def _process_commands(self, sock, pwd, cmds):
+    def _process_commands(self, pwd, cmds):
         if self.func_map.get(cmds[0]):
             func = self.func_map[cmds[0]]
             
             argspec = inspect.getargspec(func)
             args_nums = len(argspec.args) - 1 if argspec.args[0] == 'self' else len(argspec.args)
-                
+            
             if ( argspec.varargs is None and argspec.keywords is None and \
                 len(cmds[1:]) > args_nums ) or \
                 len(cmds[1:]) < args_nums - (len(argspec.defaults) if argspec.defaults is not None else 0):
-                    send_all_str(sock, f'[Error]: {cmds[0]} have {len(argspec.args)} nums args, which {(len(argspec.defaults) if argspec.defaults is not None else 0)} have set default. but you input {len(cmds[1:])} args.')
-                    return
+                    return_msg = f'[Error]: {cmds[0]} have {len(argspec.args)} nums args, which {(len(argspec.defaults) if argspec.defaults is not None else 0)} have set default. but you input {len(cmds[1:])} args.'
+                    return return_msg
                 
             args = []
             kwargs = {}
@@ -102,7 +104,7 @@ class Server(object):
                     cmd = cmd.lstrip('--')
                     splits = cmd.split('=')
                     if len(splits) == 1:
-                        kwargs[cmd] = False
+                        kwargs[cmd] = True
                         continue
                     key = splits[0]
                     value = '='.join(splits[1:])
@@ -114,7 +116,7 @@ class Server(object):
 
         else:
             return_msg = '[error]: no cmd found.'
-        send_all_str(sock, return_msg)
+        return return_msg
         
     def _help(self, cmd=None):
         '''
