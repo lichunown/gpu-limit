@@ -183,6 +183,7 @@ class Task(object):
             return
         self.process.wait()
         self.gpu = None
+        self.is_in_queue = False
         logging.info(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         
         self.task_queue.check_and_start()
@@ -205,6 +206,9 @@ class Task(object):
             time.sleep(1)
             self.process.kill()
             self.killed = True
+            
+            self.gpu = None
+            self.is_in_queue = False
             return 0, f'[info]: kill task {self.id} succeed.'
         else:
             return 1, f'[warning]: can not kill task {self.id} which have status `{self.status.status}`'
