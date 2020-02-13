@@ -3,9 +3,13 @@ import os, time
 import threading
 import logging
 
-import prettytable as pt
 from collections import namedtuple
 from queue import Queue
+
+try:
+    import prettytable as pt
+except ModuleNotFoundError:
+    from ..utils.prettytable import prettytable as pt
 
 #os.environ['GPULIMIT_DEBUG'] = '1'
                 
@@ -385,6 +389,8 @@ class TaskQueue(object):
             sort_type = TaskStatus.start_sort_type
         elif type == 'show':
             sort_type = TaskStatus.show_sort_type
+        elif type == 'id':
+            sort_type = dict(zip(TaskStatus.status2id.keys(), [1] * len(TaskStatus.status2id)))
         else:
             raise KeyError
             
@@ -462,7 +468,7 @@ class TaskQueue(object):
         use_gpu = get_use_gpu()
         for task in self.queue:
             if task.id == id:
-                if task.status.status in [ 'waiting', 'runtime_error']:
+                if task.status.status in TaskStatus.can_start_list:
                     task.allow_gpu = use_gpu.memory_free
                     return self.run_task(task)
                 else:
