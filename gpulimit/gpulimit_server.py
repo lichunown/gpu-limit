@@ -88,14 +88,7 @@ class Server(object):
         if self.func_map.get(cmds[0]):
             func = self.func_map[cmds[0]]
             
-            argspec = inspect.getargspec(func)
-            args_nums = len(argspec.args) - 1 if argspec.args[0] == 'self' else len(argspec.args)
-            
-            if ( argspec.varargs is None and argspec.keywords is None and \
-                len(cmds[1:]) > args_nums ) or \
-                len(cmds[1:]) < args_nums - (len(argspec.defaults) if argspec.defaults is not None else 0):
-                    return_msg = f'[Error]: {cmds[0]} have {len(argspec.args)} nums args, which {(len(argspec.defaults) if argspec.defaults is not None else 0)} have set default. but you input {len(cmds[1:])} args.'
-                    return return_msg
+            fullargspec = inspect.getfullargspec(func)
                 
             args = []
             kwargs = {}
@@ -111,7 +104,18 @@ class Server(object):
                     kwargs[key] = value
                 else:
                     args.append(cmd)
-                    
+            
+            return_msg = ''
+            if fullargspec.varkw is None:
+                for key in kwargs:
+                    if not key in fullargspec.kwonlyargs:
+                        return_msg += f'[Error]: {cmds[0]} not support param `{key}`. \n'
+            if fullargspec.varargs is None:
+                for key in args:
+                    if not key in fullargspec.args:
+                        return_msg += f'[Error]: {cmds[0]} not support param `{key}`. \n'
+            if return_msg: return return_msg
+            
             _, return_msg = func(*args, **kwargs)
 
         else:

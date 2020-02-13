@@ -30,10 +30,12 @@ def _get_gpu_info():
     return gpu_data
 
 
-def _get_use_gpu():
+def _get_use_gpu(allow_free=None):
     gpu_data = get_gpu_info()
-    max_free_memory_gpu = max(gpu_data, key=lambda x: x.memory_free)
-    return max_free_memory_gpu
+    if allow_free is None:
+        return max(gpu_data, key=lambda x: x.memory_free)
+    else:
+        return list(filter(lambda x: x.memory_free > allow_free, gpu_data))
 
 
 def get_gpu_info_test():
@@ -47,10 +49,12 @@ def get_gpu_info_test():
     return gpu_data
 
 
-def get_use_gpu_test():
+def get_use_gpu_test(allow_free=None):
     gpu_data = get_gpu_info()
-    max_free_memory_gpu = max(gpu_data, key=lambda x: x.memory_free)
-    return max_free_memory_gpu
+    if allow_free is None:
+        return max(gpu_data, key=lambda x: x.memory_free)
+    else:
+        return list(filter(lambda x: x.memory_free > allow_free, gpu_data))
 
 
 if not os.environ.get('GPULIMIT_DEBUG'):
@@ -68,14 +72,7 @@ else:
     get_use_gpu = _get_use_gpu
 
 
-class SystemStatus(object):
-    @staticmethod
-    def gpu_info():
-        pass
-    
-    def allow_gpus(self, min_free=1024):
-        pass
-    
+
         
 
 class TaskStatus(object):
@@ -159,6 +156,9 @@ class Task(object):
         self.cmds = cmds
         self.out_path = out_path
         
+        self.gpu = None
+        self.is_in_queue = False
+        
         self.run_times = 0
         self.out_file = None
         self.pkg_process = None
@@ -170,6 +170,7 @@ class Task(object):
     def _run_task(self, GPU_id):
         if self.out_path is not None:
             self.out_file = open(self.out_path, 'w')
+        self.gpu = GPU_id
         env = os.environ.copy()
         env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
         try:
@@ -181,6 +182,7 @@ class Task(object):
             self.task_queue.check_and_start()
             return
         self.process.wait()
+        self.gpu = None
         logging.info(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         
         self.task_queue.check_and_start()
@@ -192,6 +194,7 @@ class Task(object):
             self.run_times += 1
             self.pkg_process = threading.Thread(target=self._run_task, args=(GPU_id,))
             self.pkg_process.start()
+            
             return 0, f'[info]: start task {self.id} succeed.'
         else:
             return 1, f'[info]: can not start task {self.id} which have status `{self.status.status}`'
@@ -310,14 +313,16 @@ class TaskQueue(object):
         errcode, result = task.start(use_gpu.id)   
         return errcode, result
 
-    def ls(self, all=False, *args, **kwargs):
+    def ls(self, *, all=False, sort='show'):
         '''
         ls                            ls GPU task queue status
         '''
-        (all, ), err_msg = self._check_input(((all, bool),), args, kwargs)
+        (all, sort), err_msg = self._check_input(((all, bool), (sort,str)))
         if err_msg: return 1, err_msg
         
-        self._sort_priority('show')
+        err_code, err_msg = self._sort_priority(sort)
+        if err_msg: return 1, err_msg
+        
         result = f'TaskQueue MINI_MEM_REMAIN={self.MINI_MEM_REMAIN}, MAX_ERR_TIMES={self.MAX_ERR_TIMES}\n'
         table = pt.PrettyTable(['[ID]', 'num', 'status', 'run_times', 'pwd', 'cmds'])
         table.border = False
@@ -402,29 +407,44 @@ class TaskQueue(object):
         elif type == 'id':
             sort_type = dict(zip(TaskStatus.status2id.keys(), [1] * len(TaskStatus.status2id)))
         else:
-            raise KeyError
+            return 1, f'[Error]: can not found sort type `{type}`, which can use `show` `id` `start`'
             
         self.lock.acquire()
         self.queue = sorted(self.queue, key=lambda x: x.id)
         self.queue = sorted(self.queue, key=lambda x: sort_type[x.status.status])
         self.lock.release()
+        return 0, ''
 
     def check_and_start(self): 
-        gpu_info = get_gpu_info()
         result = ''
-        if any(map(lambda x: x.memory_free > self.MINI_MEM_REMAIN, gpu_info)):
-            self.lock.acquire()
+        can_use_gpu = get_use_gpu(self.MINI_MEM_REMAIN)
+        if can_use_gpu:
             self._sort_priority('start')
-            for task in self.queue:
-                if task.status.status in TaskStatus.auto_start_list:
-                    self.need_start_tasks.put(task)
-                    result += f'[info]: starting task {task.id}.'
-                    break
-            self.lock.release()
+            remain_tasks = list(filter(lambda task: task.status.status in TaskStatus.auto_start_list and not task.is_in_queue, self.queue))
+            if remain_tasks:
+                self.need_start_tasks.put(remain_tasks[0])
+                remain_tasks[0].is_in_queue = True
+            else:
+                result = f'all task is to be run or completed.'
         else:
             result = 'GPU memory is full. task is waitting for others.'
-        if not result:
-            result = f'all task is to be run or completed.'
+            
+#        going_to_start_tasks = remain_tasks[:len(can_use_gpu)]
+#        self.need_start_tasks.put(zip(going_to_start_tasks, can_use_gpu))
+        
+#        if any(map(lambda x: x.memory_free > self.MINI_MEM_REMAIN, gpu_info)):
+#
+#            
+#            for task in self.queue:
+#                if task.status.status in TaskStatus.auto_start_list:
+#                    self.need_start_tasks.put(task)
+#                    result += f'[info]: starting task {task.id}.'
+#                    break
+#
+#        else:
+#            result = 'GPU memory is full. task is waitting for others.'
+#        if not result:
+#            result = f'all task is to be run or completed.'
         logging.info(result)
         return 0, result
 
