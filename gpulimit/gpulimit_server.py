@@ -2,6 +2,7 @@
 import os, sys, inspect
 import time
 import socket
+import traceback
 
 import pickle as pk
 
@@ -73,11 +74,14 @@ class Server(object):
         msgs = recv_all(sock)
         pwd, cmds = pk.loads(msgs)
         
-        if cmds[0] == 'add':
-            msg = self._create_task(pwd, cmds[1:])
-        else:
-            msg = self._process_commands(pwd, cmds)
-
+        try:
+            if cmds[0] == 'add':
+                msg = self._create_task(pwd, cmds[1:])
+            else:
+                msg = self._process_commands(pwd, cmds)
+        except Exception:
+            msg = traceback.format_exc()
+            
         send_all_str(sock, msg)
             
     def _create_task(self, pwd, cmds):
@@ -111,9 +115,8 @@ class Server(object):
                     if not key in fullargspec.kwonlyargs:
                         return_msg += f'[Error]: {cmds[0]} not support param `{key}`. \n'
             if fullargspec.varargs is None:
-                for key in args:
-                    if not key in fullargspec.args:
-                        return_msg += f'[Error]: {cmds[0]} not support param `{key}`. \n'
+                if len(fullargspec.args) - 1 < len(args):
+                    return_msg += f'[Error]: {cmds[0]} have max {len(fullargspec.args) - 1} input, but you input {len(args)} args. \n'
             if return_msg: return return_msg
             
             _, return_msg = func(*args, **kwargs)
