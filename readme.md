@@ -58,3 +58,11 @@ gpulimit log [task id]
 ```bash
 gpulimit log main
 ```
+
+## TODO list
+
+- [x] start
+- [ ] kill all, range
+- [ ] ls show use gpu & running target
+- [ ] change raise type, and add `try except` for exception break.
+- [ ] commit & \_\_doc\_\_
