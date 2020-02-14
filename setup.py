@@ -4,13 +4,13 @@ from setuptools import setup, find_packages
 import sys
 
 
-with open("readme.md", "r") as fh:
+with open("readme.md", "r", encoding='utf8') as fh:
     long_description = fh.read()
 
 
 setup(
     name='gpulimit',
-    version="0.0.1",
+    version="0.0.2",
     author="lcy",
     author_email="lichunyang_1@outlook.com",
     description=("DL training on GPU management"),
@@ -23,7 +23,7 @@ setup(
         "License :: OSI Approved :: MIT License",
         "Operating System :: OS Independent",
     ],
-    
+
     packages=find_packages(),
     data_files=[],
     install_requires=[
