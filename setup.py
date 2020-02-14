@@ -4,13 +4,26 @@ from setuptools import setup, find_packages
 import sys
 
 
+with open("readme.md", "r") as fh:
+    long_description = fh.read()
+
+
 setup(
     name='gpulimit',
     version="0.0.1",
     author="lcy",
-    description=("GPU limit management"),
+    author_email="lichunyang_1@outlook.com",
+    description=("DL training on GPU management"),
+    long_description=long_description,
+    long_description_content_type="text/markdown",
+    url="https://github.com/lichunown/gpu-limit",
 
-    url="https://github.com/lichunown/gpulimit",
+    classifiers=[
+        "Programming Language :: Python :: 3",
+        "License :: OSI Approved :: MIT License",
+        "Operating System :: OS Independent",
+    ],
+    
     packages=find_packages(),
     data_files=[],
     install_requires=[
