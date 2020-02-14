@@ -6,8 +6,8 @@ import traceback
 
 import pickle as pk
 
-from gpulimit_core.socket_utils import recv_all, send_all_str
-from gpulimit_core.task_mutiprocess import TaskQueue, _get_gpu_info
+from gpulimit.gpulimit_core.socket_utils import recv_all, send_all_str
+from gpulimit.gpulimit_core.task_mutiprocess import TaskQueue, _get_gpu_info
 
 
 """

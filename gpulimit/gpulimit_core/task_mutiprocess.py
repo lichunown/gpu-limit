@@ -332,10 +332,11 @@ class TaskQueue(object):
         table.border = False
 #        result += '[ID]\tnum\t|\tstatus\trun_times\tcmds\n'
         for i, task in enumerate(self.queue):
+            status = str(task.status) + f'(GPU:{task.gpu})' if task.gpu is not None else str(task.status)
             if not all:
-                table.add_row([task.id, i, str(task.status), task.run_times, task.pwd+'#', " ".join(task.cmds)[:80]])
+                table.add_row([task.id, i, status, task.run_times, task.pwd+'#', " ".join(task.cmds)[:80]])
             else:
-                table.add_row([task.id, i, str(task.status), task.run_times, task.pwd+'#', " ".join(task.cmds)])
+                table.add_row([task.id, i, status, task.run_times, task.pwd+'#', " ".join(task.cmds)])
 #            result += f'{task.id}\t{i}\t|\t{str(task.status)}\t{task.run_times}\t{task.pwd}# {"".join(task.cmds)}\n'
         return 0, result + str(table)
 
@@ -508,15 +509,11 @@ class TaskQueue(object):
         if err_msg:
             return 1, err_msg
         
-        use_gpu = get_use_gpu()
         for task in self.queue:
             if task.id == id:
-                if task.status.status in TaskStatus.can_start_list:
-                    task.allow_gpu = use_gpu.memory_free
-                    return self.run_task(task)
-                else:
-                    return 0, f'[error]: task[{id}] is in {task.status.status} status, can not start.'
-        return 0, f'[error]: can not found task[{id}]'
+                return self.run_task(task)
+
+        return 1, f'[error]: can not found task[{id}]'
                 
     def get_output_filename(self, id):
         '''

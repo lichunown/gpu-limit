@@ -2,7 +2,7 @@
 
 import sys, socket, os
 import pickle as pk
-from gpulimit_core.socket_utils import send_all, recv_all_str
+from gpulimit.gpulimit_core.socket_utils import send_all, recv_all_str
 
 
 if sys.platform == 'linux':

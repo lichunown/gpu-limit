@@ -18,7 +18,7 @@ setup(
     ],
 
     entry_points={'console_scripts': [
-       'gpulimit_server = gpulimit.gpulimit_server:main',
+       'gpulimit-server = gpulimit.gpulimit_server:main',
        'gpulimit = gpulimit.gpulimit:main',
     ]},
 
