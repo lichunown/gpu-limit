@@ -32,7 +32,7 @@ setup(
 
     entry_points={'console_scripts': [
        'gpulimit-server = gpulimit.gpulimit_server:main',
-       'gpulimit = gpulimit.gpulimit:main',
+       'gpulimit = gpulimit.gpulimit_client:main',
     ]},
 
     zip_safe=False
