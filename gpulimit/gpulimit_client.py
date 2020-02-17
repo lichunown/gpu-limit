@@ -2,6 +2,10 @@
 
 import sys, socket, os
 import pickle as pk
+
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
+sys.path.insert(0, parentdir) 
+
 from gpulimit.gpulimit_core.socket_utils import send_all, recv_all_str
 
 

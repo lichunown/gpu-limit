@@ -6,8 +6,11 @@ import traceback
 
 import pickle as pk
 
+parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
+sys.path.insert(0, parentdir) 
+
 from gpulimit.gpulimit_core.socket_utils import recv_all, send_all_str
-from gpulimit.gpulimit_core.task_mutiprocess import TaskQueue, _get_gpu_info
+from gpulimit.gpulimit_core.task_mutiprocess import TaskQueue
 
 
 """
@@ -32,7 +35,8 @@ class Server(object):
             self.task_queue = TaskQueue(logdir='/tmp/', MINI_MEM_REMAIN=1024)
         else:
             self.task_queue = TaskQueue(logdir='./tmp/', MINI_MEM_REMAIN=1024)
-            
+        
+#        print('task_queue.func_map:', self.task_queue.func_map)
         self.func_map = {
                 
             '-h': self._help,
@@ -54,6 +58,10 @@ class Server(object):
             'clean': self.task_queue.clean, 
             
             'set': self.task_queue.set_property, 
+            
+            'status': self.task_queue.status,
+            
+            'debug': self.task_queue.debug,
             
         }
     def start(self):

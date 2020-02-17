@@ -1,5 +1,5 @@
 import subprocess
-import os, time
+import os, time, traceback
 import threading
 import logging
 
@@ -11,7 +11,6 @@ try:
 except ModuleNotFoundError:
     from utils import prettytable as pt
 
-#os.environ['GPULIMIT_DEBUG'] = '1'
                 
 GPUInfo = namedtuple('GPUInfo', ('id','memory_total', 'memory_free', 'memory_used'))
 
@@ -40,7 +39,7 @@ def _get_use_gpu(allow_free=None):
 
 def get_gpu_info_test():
     gpu_data = []
-    with open('./test/Resources', 'r') as f:
+    with open('./gpulimit/test/Resources', 'r') as f:
         for line in f:
             id, free = line.strip().split(':')
             id = int(id)
@@ -58,7 +57,11 @@ def get_use_gpu_test(allow_free=None):
 
 
 if not os.environ.get('GPULIMIT_DEBUG'):
-    if not _get_gpu_info():
+    try:
+        result = _get_gpu_info()
+    except Exception:
+        result = None
+    if not result:
         print('[Warning]: can not use `nvidia-smi`, please check cuda environment.')
         print('[info]: set GPULIMIT_DEBUG=1.')
         os.environ['GPULIMIT_DEBUG'] = '1'
@@ -166,6 +169,7 @@ class Task(object):
         self.available = True
 
         self.killed = False
+        self.debug_msg = None
         
     def _run_task(self, GPU_id):
         if self.out_path is not None:
@@ -174,11 +178,14 @@ class Task(object):
         env = os.environ.copy()
         env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
         try:
-            self.process = subprocess.Popen(self.cmds, stdout=self.out_file, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
+            self.process = subprocess.Popen(self.cmds, stdout=self.out_file, shell=True, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
             logging.info(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         except Exception as e:
             self.available = False
             logging.info(f'[CMD_ERROR({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds} \nerror:\n{e}')
+            msg = traceback.format_exc()
+            logging.info(msg)
+            self.debug_msg = 'cmds: ' + str(self.cmds) + "\n" + msg
             self.task_queue.check_and_start()
             return
         self.process.wait()
@@ -234,6 +241,13 @@ class Task(object):
             return TaskStatus('runtime_error', self.run_times, err_code=status)
 
 
+#def client(client_cmd):
+#    def decorator(func):
+#        def wrapper(self, *args, **kwargs):
+#            self.func_map[client_cmd] = func
+#            return func(*args, **kwargs)
+#        return wrapper
+#    return decorator
 
 
 class TaskQueue(object):
@@ -259,7 +273,8 @@ class TaskQueue(object):
             logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
             logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
 
-
+#        self.func_map = {}
+        
         self.MINI_MEM_REMAIN = MINI_MEM_REMAIN
         self.MAX_ERR_TIMES = MAX_ERR_TIMES
         self.WAIT_TIME = WAIT_TIME
@@ -269,6 +284,7 @@ class TaskQueue(object):
         self.lock = threading.RLock()
         self.start_thread.start()
         
+    
     def _thread_start_task(self):
         while True:
             if not self.need_start_tasks.empty():
@@ -317,6 +333,7 @@ class TaskQueue(object):
         errcode, result = task.start(use_gpu.id)   
         return errcode, result
 
+#    @client('ls')
     def ls(self, *, all=False, sort='show'):
         '''
         ls                            ls GPU task queue status
@@ -434,22 +451,6 @@ class TaskQueue(object):
         else:
             result = 'GPU memory is full. task is waitting for others.'
             
-#        going_to_start_tasks = remain_tasks[:len(can_use_gpu)]
-#        self.need_start_tasks.put(zip(going_to_start_tasks, can_use_gpu))
-        
-#        if any(map(lambda x: x.memory_free > self.MINI_MEM_REMAIN, gpu_info)):
-#
-#            
-#            for task in self.queue:
-#                if task.status.status in TaskStatus.auto_start_list:
-#                    self.need_start_tasks.put(task)
-#                    result += f'[info]: starting task {task.id}.'
-#                    break
-#
-#        else:
-#            result = 'GPU memory is full. task is waitting for others.'
-#        if not result:
-#            result = f'all task is to be run or completed.'
         logging.info(result)
         return 0, result
 
@@ -503,6 +504,15 @@ class TaskQueue(object):
         return result
     
     def start(self, id=None):
+        '''
+        start [iddefalut=None]        Force start task(s).
+        
+        Information:
+            
+            gpulimit start            running `check_and_start`, and auto start new task.
+            gpulimit start 1          Force start task [id].
+        '''
+        
         if id is None:
             return self.check_and_start()
         (id, ), err_msg = self._check_input(((id, int),), )
@@ -540,3 +550,41 @@ class TaskQueue(object):
             return 0, path
         else:
             return 1, 'Error'
+        
+    def status(self):
+        '''
+        status                        show GPU status.
+        
+        Example:
+            
+            Nothing
+        '''
+        gpu_data = get_gpu_info()
+        task_nums = [0] * len(gpu_data)
+        for task in self.queue:
+            if task.gpu:
+                task_nums[task.gpu] += 1
+                
+        table = pt.PrettyTable(['GPU[ID]', 'memory total', 'memory free', 'memory used', 'running tasks num'])
+        table.border = False
+        for info, use_num in zip(gpu_data, task_nums):
+            table.add_row([info.id, info.memory_total, info.memory_free, info.memory_used, use_num])
+            
+        return 0, str(table)
+    
+    def debug(self, id):
+        '''
+        debug [id]                    if task [id] is `CMD_ERROR`, use this show error traceback.
+        
+        Example:
+            
+            debug 1                   show task 1 error traceback.                
+        '''
+        (id, ), err_msg = self._check_input(((id, int),), )
+        if err_msg:
+            return 1, err_msg
+        
+        for task in self.queue:
+            if task.id == id:
+                return 0, str(task.debug_msg)
+        return 1, f'[error]: can not found task[{id}]'
