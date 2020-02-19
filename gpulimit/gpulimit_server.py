@@ -85,10 +85,11 @@ class Server(object):
         args = []
         kwargs = {}
         for cmd in cmds:
-            if cmd.startswith('--'):
+            if not cmd.startswith('--'):
                 if not get_all:
                     add_arg = False
                     
+            if cmd.startswith('--'):
                 cmd = cmd.lstrip('--')
                 splits = cmd.split('=')
                 if len(splits) == 1:
@@ -115,13 +116,17 @@ class Server(object):
                 max_args_len = 0
             else:
                 max_args_len = len(fullargspec.args)-1 if fullargspec.args[0] == 'self' else len(fullargspec.args)
+            defaults_nums = 0 if fullargspec.defaults is None else len(fullargspec.defaults)
+            min_args_len = max_args_len - defaults_nums
+            if len(args) < min_args_len:
+                return_msg += f'[Error]: have min {min_args_len} input, but you input {len(args)} args. \n'
             if max_args_len < len(args):
                 return_msg += f'[Error]: have max {max_args_len} input, but you input {len(args)} args. \n'
         return return_msg
     
         
     def _create_task(self, pwd, cmds):
-        _, kwargs = self._get_args(cmds[1:], False)
+        args, kwargs = self._get_args(cmds[1:], False)
         i = -1
         for i, cmd in enumerate(cmds[1:]):
             if not cmd.startswith('--'):
@@ -129,8 +134,15 @@ class Server(object):
         cmds = cmds[i + 1:]
         if len(cmds) == 0:
             return f'[Error]: you input args {kwargs}, but no cmd input.'
-        err_msg = self._check_input(self.task_manage.add, (), kwargs)
+        
+        err_msg = ''
+        for arg in args:
+            err_msg += f'[Error]: add not support args {arg}'
+        for kwarg in kwargs:
+            if kwarg not in inspect.getfullargspec(self.task_manage.add).kwonlyargs:
+                err_msg += f'[Error]: add not support kwargs {kwarg}'
         if err_msg: return err_msg
+        
         _, result = self.task_manage.add(pwd, cmds, **kwargs)
         return result
         
@@ -161,7 +173,7 @@ GPU Task Manage:
         gpulimit add [cmds]           add task [cmds] to gpulimit queue.
         
 
-    other commands:\n'''
+    other commands:\n\n'''
     
         if cmd is not None:
             if self.func_map.get(cmd):

@@ -166,7 +166,15 @@ task_manage = TaskManage(BaseScheduling())
 def ls(*, all=False, sort='show'):
     '''
         ls                            ls GPU task queue status
+        
+        Options:
+            
+            --all                     default ls only show <80 commands, 
+                                      use `all` to show all commands. 
+            --sort                    show by different sort type. 
+                                      can use: ['id', 'priority', 'show', 'run']
     '''
+    
     (all, sort), err_msg = check_input(((all, bool), (sort, str)))
     if err_msg: return 1, err_msg
     
@@ -185,6 +193,35 @@ def ls(*, all=False, sort='show'):
 #    print(str(table))
     return 0, str(table)
 
+
+@task_manage.client('show')
+def show(id):
+    '''
+        show [id]                     show task [id] details.
+
+    '''
+    
+    (id,), err_msg = check_input(((id, int),))
+    if err_msg:
+        return 1, err_msg
+    
+    task = task_manage.get_task(id)
+    if task is None:
+        return 1, f'[error]: can not found id {id} in task queue.'
+    
+    table = pt.PrettyTable(['name', 'value'])
+    table.border = False
+    table.align = 'l'
+    table.add_row(['task id:', task.id])
+    table.add_row(['task pid:', task.pid])
+    table.add_row(['priority:', task.priority])
+    table.add_row(['use gpu:', task.gpu])
+    table.add_row(['error times:', task.run_times])
+    table.add_row(['status:', task.status.status])
+    table.add_row(['out file:', task.out_path])
+    table.add_row(['pwd:', task.pwd])
+    table.add_row(['cmds:', " ".join(task.cmds)])
+    return 0, str(table)
 
 @task_manage.client('rm')
 def rm(id):
@@ -239,7 +276,14 @@ def mv(id, index=0, *args, **kwargs):
 def set_property(name=None, value=None):
     '''
         set [name] [value]            set some property.
-        
+                                      If no input, show all param setted value.
+                                      
+        Can Set Params:
+            
+            'MINI_MEM_REMAIN':        MINI_MEM_REMAIN,
+            'MAX_ERR_TIMES':          MAX_ERR_TIMES,
+            'WAIT_TIME':              WAIT_TIME,
+            
         Example:
             
             gpulimit set WAIT_TIME 1  set `WAIT_TIME=1`
@@ -304,7 +348,7 @@ def get_output_filename(id):
 
 
 @task_manage.client('status')   
-def status(self):
+def status():
     '''
         status                        show System status.
         
@@ -312,19 +356,27 @@ def status(self):
             
             Nothing
     '''
-    gpu_data = system_info.refresh().gpu
+    all_info = system_info()
+    gpu_data = all_info.gpu
+    
     
     task_nums = [0] * len(gpu_data)
-    for task in self.queue:
+    for task in task_manage.tasks:
         if task.gpu:
             task_nums[task.gpu] += 1
-            
+    result = ''
+    table = pt.PrettyTable(['CPU utilization', 'memory total', 'memory free', 'memory used'])
+    table.border = False
+    table.add_row([all_info.CPU_utilization, all_info.memory.total, all_info.memory.free, all_info.memory.used])
+    result += str(table)
+    result += '\n\n'
     table = pt.PrettyTable(['GPU[ID]', 'memory total', 'memory free', 'memory used', 'running tasks num'])
     table.border = False
     for info, use_num in zip(gpu_data, task_nums):
         table.add_row([info.id, info.memory_total, info.memory_free, info.memory_used, use_num])
-        
-    return 0, str(table)
+    result += str(table)
+    
+    return 0, result
 
 
 @task_manage.client('debug')   
