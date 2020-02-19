@@ -10,7 +10,7 @@ with open("readme.md", "r", encoding='utf8') as fh:
 
 setup(
     name='gpulimit',
-    version="0.1.0",
+    version="0.1.1",
     author="lcy",
     author_email="lichunyang_1@outlook.com",
     description=("DL training on GPU management"),
@@ -33,6 +33,7 @@ setup(
     entry_points={'console_scripts': [
        'gpulimit-server = gpulimit.gpulimit_server:main',
        'gpulimit = gpulimit.gpulimit_client:main',
+       'gpulimitc = gpulimit.gpulimit_client:main',
     ]},
 
     zip_safe=False

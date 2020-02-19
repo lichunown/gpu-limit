@@ -6,19 +6,26 @@
 
 ## install
 
-`setup.py`的编写似乎有些问题，现在还在调试。
+代码还在大改中，bug仍很多。。。
+
+### 源码安装
 
 ```bash
 git clone https://github.com/lichunown/gpu-limit.git
 cd gpu-limit
 python setup.py install
 ```
+### pip 安装
+
+```bash
+pip3 install gpulimit
+```
 
 ## usage
 
 本程序使用linux socket进行交互，后台`gpulimit_server`动态调度，前台`gpulimit`发送命令，获取信息。
 
-### 启动服务
+### 启动后台服务
 
 ```bash
 gpulimit_server # 直接启动
@@ -26,6 +33,35 @@ nohup gpulimit_server & # 后台运行
 ```
 
 ### 前台命令
+
+```bash
+$ gpulimitc help
+
+GPU Task Manage:
+    usage:
+
+        client.py -h                  show help
+        gpulimit add [cmds]           add task [cmds] to gpulimit queue.
+
+
+    other commands:
+
+        help [cmd]                    show help
+        add [cmds]                    ls GPU task queue status
+        ls                            ls GPU task queue status
+        show [id]                     show task [id] details.
+        rm [id]                       remove task [id] from manage, 
+        							  	if task is running, kill it.
+        							  
+        kill [id]                     kill task [id]
+        move [id] [index(default=0)]  move [id] to [index]
+        set [name] [value]            set some property.
+        start [id defalut=None]       Force start task(s).
+        log [id]                      show [id] output.
+        status                        show System status.
+        debug [id]                    if task [id] is `CMD_ERROR`, 
+                                      	use this show error traceback.
+```
 
 #### 添加任务
 
@@ -61,8 +97,12 @@ gpulimit log main
 
 ## TODO list
 
-- [x] start
+
+- [x] change raise type, and add `try except` for exception break.
+- [x]  \_\_doc\_\_
 - [ ] kill all, range
-- [ ] ls show use gpu & running target
-- [ ] change raise type, and add `try except` for exception break.
-- [ ] commit & \_\_doc\_\_
+- [ ] add commits
+- [ ] use priority queue as task_manage.queue
+- [ ] Improve scheduling aligorithm
+- [ ] 
+
