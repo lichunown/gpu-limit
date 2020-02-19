@@ -14,6 +14,8 @@ except ModuleNotFoundError:
                 
 GPUInfo = namedtuple('GPUInfo', ('id','memory_total', 'memory_free', 'memory_used'))
 
+
+
 def _get_gpu_info():
     gpu_info = os.popen('nvidia-smi --query-gpu=index,memory.total,memory.free,memory.used --format=csv')
     gpu_info.readline()

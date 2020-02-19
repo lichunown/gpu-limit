@@ -9,8 +9,8 @@ import pickle as pk
 parentdir = os.path.dirname(os.path.dirname(os.path.abspath(__file__))) 
 sys.path.insert(0, parentdir) 
 
-from gpulimit.gpulimit_core import recv_all, send_all_str
-from gpulimit.gpulimit_core import task_manage
+from gpulimit.gpulimit_core.socket_utils import recv_all, send_all_str
+from gpulimit.gpulimit_core.task_mutiprocess import TaskQueue
 
 
 """
@@ -31,25 +31,39 @@ class Server(object):
             server_address = ('0.0.0.0', 5123)
         self.server_address = server_address
         
-        self.task_manage = task_manage
         if sys.platform == 'linux':
-            self.task_manage.start(logdir='/tmp/')
+            self.task_queue = TaskQueue(logdir='/tmp/', MINI_MEM_REMAIN=1024)
         else:
-            self.task_manage.start(logdir='./tmp/')
+            self.task_queue = TaskQueue(logdir='./tmp/', MINI_MEM_REMAIN=1024)
         
+#        print('task_queue.func_map:', self.task_queue.func_map)
         self.func_map = {
                 
             '-h': self._help,
             '--help': self._help,
             'help': self._help, 
             
-            'add': self.task_manage.add,
+            'ls': self.task_queue.ls,
+            
+            'kill': self.task_queue.kill, 
+            
+            'start': self.task_queue.start,
+            
+            'rm': self.task_queue.rm, 
+    
+            'move': self.task_queue.move_to_top, 
+    
+            'log': self.task_queue.get_output_filename, 
+    
+            'clean': self.task_queue.clean, 
+            
+            'set': self.task_queue.set_property, 
+            
+            'status': self.task_queue.status,
+            
+            'debug': self.task_queue.debug,
             
         }
-#        print(self.task_manage.func_map)
-        self.func_map.update(self.task_manage.func_map)
-        
-        
     def start(self):
         if isinstance(self.server_address, str):
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -70,77 +84,48 @@ class Server(object):
         
         try:
             if cmds[0] == 'add':
-                
-                msg = self._create_task(pwd, cmds)
+                msg = self._create_task(pwd, cmds[1:])
             else:
                 msg = self._process_commands(pwd, cmds)
         except Exception:
             msg = traceback.format_exc()
             
-        send_all_str(sock, msg)  
-        
-    def _get_args(self, cmds, get_all=True):
-        add_arg = True
-        
-        args = []
-        kwargs = {}
-        for cmd in cmds:
-            if cmd.startswith('--'):
-                if not get_all:
-                    add_arg = False
-                    
-                cmd = cmd.lstrip('--')
-                splits = cmd.split('=')
-                if len(splits) == 1:
-                    kwargs[cmd] = True
-                    continue
-                key = splits[0]
-                value = '='.join(splits[1:])
-                kwargs[key] = value
-            else:
-                if add_arg:
-                    args.append(cmd)
-                    
-        return args, kwargs
-        
-    def _check_input(self, func, args, kwargs):
-        fullargspec = inspect.getfullargspec(func)
-        return_msg = ''
-        if fullargspec.varkw is None:
-            for key in kwargs:
-                if not key in fullargspec.kwonlyargs:
-                    return_msg += f'[Error]: not support param `{key}`. \n'
-        if fullargspec.varargs is None:
-            if len(fullargspec.args) == 0:
-                max_args_len = 0
-            else:
-                max_args_len = len(fullargspec.args)-1 if fullargspec.args[0] == 'self' else len(fullargspec.args)
-            if max_args_len < len(args):
-                return_msg += f'[Error]: have max {max_args_len} input, but you input {len(args)} args. \n'
-        return return_msg
-    
-        
+        send_all_str(sock, msg)
+            
     def _create_task(self, pwd, cmds):
-        _, kwargs = self._get_args(cmds[1:], False)
-        i = -1
-        for i, cmd in enumerate(cmds[1:]):
-            if not cmd.startswith('--'):
-                break
-        cmds = cmds[i + 1:]
-        if len(cmds) == 0:
-            return f'[Error]: you input args {kwargs}, but no cmd input.'
-        err_msg = self._check_input(self.task_manage.add, (), kwargs)
-        if err_msg: return err_msg
-        _, result = self.task_manage.add(pwd, cmds, **kwargs)
+        _, result = self.task_queue.add(pwd, cmds)
         return result
         
     def _process_commands(self, pwd, cmds):
         if self.func_map.get(cmds[0]):
             func = self.func_map[cmds[0]]
             
-            args, kwargs = self._get_args(cmds[1:])         
-            err_msg = self._check_input(func, args, kwargs)
-            if err_msg: return err_msg
+            fullargspec = inspect.getfullargspec(func)
+                
+            args = []
+            kwargs = {}
+            for cmd in cmds[1:]:
+                if cmd.startswith('--'):
+                    cmd = cmd.lstrip('--')
+                    splits = cmd.split('=')
+                    if len(splits) == 1:
+                        kwargs[cmd] = True
+                        continue
+                    key = splits[0]
+                    value = '='.join(splits[1:])
+                    kwargs[key] = value
+                else:
+                    args.append(cmd)
+            
+            return_msg = ''
+            if fullargspec.varkw is None:
+                for key in kwargs:
+                    if not key in fullargspec.kwonlyargs:
+                        return_msg += f'[Error]: {cmds[0]} not support param `{key}`. \n'
+            if fullargspec.varargs is None:
+                if len(fullargspec.args) - 1 < len(args):
+                    return_msg += f'[Error]: {cmds[0]} have max {len(fullargspec.args) - 1} input, but you input {len(args)} args. \n'
+            if return_msg: return return_msg
             
             _, return_msg = func(*args, **kwargs)
 
