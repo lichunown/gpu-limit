@@ -19,6 +19,21 @@ GPU Task Manage
 
 
 class Server(object):
+    """
+    this is the server class
+    
+    In linux system, the server bind `socket.AF_UNIX`, while in windows system,
+    it bind in `socket.AF_INET`. 
+    
+    In windows, server_address is ('0.0.0.0', 5123)
+    In linux, server_address is '/tmp/gpulimit_uds_socket'
+    
+    use `Server.start()` running server.
+    
+    for each client requests, solve the requests and return a response,
+    which is like Http protocol.
+    
+    """
     def __init__(self):
         if sys.platform == 'linux':
             server_address = '/tmp/gpulimit_uds_socket'
@@ -33,9 +48,13 @@ class Server(object):
         
         self.task_manage = task_manage
         if sys.platform == 'linux':
-            self.task_manage.start(logdir='/tmp/')
+            logdir = '/tmp/gpulimit'
         else:
-            self.task_manage.start(logdir='./tmp/')
+            logdir='./tmp/gpulimit'
+        if not os.path.exists(logdir):
+            os.makedirs(logdir)
+            
+        self.task_manage.start(logdir=logdir)
         
         self.func_map = {
                 
@@ -46,11 +65,14 @@ class Server(object):
             'add': self.task_manage.add,
             
         }
-#        print(self.task_manage.func_map)
+        # add self.task_manage.func_map
         self.func_map.update(self.task_manage.func_map)
         
         
     def start(self):
+        """
+        bind adress & enter main loop.
+        """
         if isinstance(self.server_address, str):
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
         else:
@@ -65,12 +87,21 @@ class Server(object):
             connection.close()
             
     def _process(self, sock):
+        """
+        main process:
+        
+            recv request --> solve them  -->  return response
+        
+        here we treat the cmd `add` specially.
+        
+        And if any error were raised, we capture the traceback and return to 
+        the client, which ensure that the server can not break incorrectly.
+        """
         msgs = recv_all(sock)
         pwd, cmds = pk.loads(msgs)
         
         try:
             if cmds[0] == 'add':
-                
                 msg = self._create_task(pwd, cmds)
             else:
                 msg = self._process_commands(pwd, cmds)
@@ -79,7 +110,16 @@ class Server(object):
             
         send_all_str(sock, msg)  
         
-    def _get_args(self, cmds, get_all=True):
+    @staticmethod
+    def _get_args(cmds, get_all=True):
+        """
+        Parsing user's input, find args or kwargs in cmds.
+        
+        Input:
+            cmds                    a list of user input, type(list)
+            get_all                 if True, all cmd not startswith('--') will add to args.
+                                    if False, only return args before kwargs.
+        """
         add_arg = True
         
         args = []
@@ -101,10 +141,16 @@ class Server(object):
             else:
                 if add_arg:
                     args.append(cmd)
+                else:
+                    break
                     
         return args, kwargs
         
     def _check_input(self, func, args, kwargs):
+        """
+        Check if the user's input match the function.
+        
+        """
         fullargspec = inspect.getfullargspec(func)
         return_msg = ''
         if fullargspec.varkw is None:
@@ -126,6 +172,10 @@ class Server(object):
     
         
     def _create_task(self, pwd, cmds):
+        """
+        When user's command is `add`, create task.
+        
+        """
         args, kwargs = self._get_args(cmds[1:], False)
         i = -1
         for i, cmd in enumerate(cmds[1:]):
@@ -147,6 +197,10 @@ class Server(object):
         return result
         
     def _process_commands(self, pwd, cmds):
+        """
+        When user's command is not `add`, do other commands in `func_map`.
+        
+        """
         if self.func_map.get(cmds[0]):
             func = self.func_map[cmds[0]]
             

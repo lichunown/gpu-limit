@@ -4,7 +4,7 @@ import logging
 from .system_info import system_info
 from .tasks import TaskStatus
 
-class Scheduling(abc.ABC):
+class Scheduling(metaclass=abc.ABCMeta):
     
     @abc.abstractmethod
     def callback_process_end(self, task_manage, *args, **kwargs):

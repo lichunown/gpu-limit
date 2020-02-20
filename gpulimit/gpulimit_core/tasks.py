@@ -118,7 +118,6 @@ class Task(object):
         self.priority = None
         self.pid = None
         self.gpu = None
-        self.is_in_queue = False
         
         self.run_times = 0
         self.out_file = None
@@ -150,7 +149,6 @@ class Task(object):
         self.process.wait()
         self.gpu = None
         self.pid = None
-        self.is_in_queue = False
         logging.info(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         
         self.task_manage.scheduling.callback_process_end(self.task_manage)
@@ -176,7 +174,6 @@ class Task(object):
             
             self.gpu = None
             self.pid = None
-            self.is_in_queue = False
             return 0, f'[info]: kill task {self.id} succeed.'
         else:
             return 1, f'[warning]: can not kill task {self.id} which have status `{self.status.status}`'

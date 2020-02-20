@@ -13,6 +13,30 @@ from .scheduling import BaseScheduling
 
 
 class TaskManage(object):
+    """
+    Task Manage Class
+    
+    Property:
+        
+        tasks                    list: all task list
+        logdir                   str: log dir path
+        scheduling               scheduling class
+        setter_param             a dict of variable parameter
+        
+    Functions:
+        
+        start(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=5, WAIT_TIME=10)
+        add_task(self, new_task, priority=5)
+        get_task(self, id)
+        rm_task(self, id)
+        mv_task(self, id, index)
+        change_priority(self, id, priority)
+        
+    Decorator:
+        
+        client
+        
+    """
     def __init__(self, scheduling):
         self.queue = []
         self._id_give = 0
@@ -20,12 +44,9 @@ class TaskManage(object):
         self.logdir = None
         self.log_file = None
         
-        if os.environ.get('GPULIMIT_DEBUG'):
-            logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(message)s')
-            logging.basicConfig(level=logging.WARNING, format='%(asctime)s - %(message)s')
-        else:
-            logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
-            logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
+
+        logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
+        logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
 
         self.func_map = {}
         self.scheduling = scheduling
@@ -41,6 +62,11 @@ class TaskManage(object):
         
         
     def start(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=5, WAIT_TIME=10):
+        """
+        init setting, and start timer scheduling
+        
+        """
+    
         self.logdir = logdir
         self.log_file = os.path.join(self.logdir, 'main.log')
         
@@ -127,6 +153,21 @@ class TaskManage(object):
         return True
     
     def client(self, client_cmd):
+        """
+        This is decorator functions.
+        
+        Examples:
+            
+            ```
+            task_manage = TaskManage(...)
+            @task_manage.client('example')
+            def example(a, b, *, c='c', d='d'):
+                pass
+            ```
+            
+            **Args which have default value, must set it as `inspect.kwonlyargs`**
+            
+        """
         def decorator(func):
             self.func_map[client_cmd] = func
             return func
