@@ -24,10 +24,10 @@ class System(object):
         try:
             r = self.get_gpu_info()
             if not r:
-                self.get_gpu_info = lambda: None
+                self.get_gpu_info = lambda: []
                 logging.warn('Can not use `nvidia-smi`, please check you `PATH` environment.')
         except Exception:
-            self.get_gpu_info = lambda: None
+            self.get_gpu_info = lambda: []
             logging.warn('Can not use `nvidia-smi`, please check you `PATH` environment.')
             
     def refresh(self):
