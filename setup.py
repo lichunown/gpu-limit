@@ -27,7 +27,7 @@ setup(
     packages=find_packages(),
     data_files=[],
     install_requires=[
-        'prettytable',
+        # 'prettytable',
     ],
 
     entry_points={'console_scripts': [
