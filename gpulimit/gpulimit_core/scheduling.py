@@ -39,12 +39,12 @@ class BaseScheduling(Scheduling):
     
     def timer_call(self, task_manage, *args, **kwargs):
         info = system_info.refresh()
-        if len(info.gpu) == 0:
+        if info.gpu is None:
             for task in task_manage.tasks:
                 if task.run_times > task_manage.setter_param['MAX_ERR_TIMES']:
                     continue
                 if task.status.status in TaskStatus.auto_start_list:
-                    task.start(self._use_gpu_id(info))
+                    task.start(0)
                     logging.info(f'start task {task.id}.')
                     return True
             return False

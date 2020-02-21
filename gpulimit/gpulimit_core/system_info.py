@@ -22,7 +22,10 @@ class System(object):
         else:
             self.get_gpu_info = self._get_gpu_info
         try:
-            self.get_gpu_info()
+            r = self.get_gpu_info()
+            if not r:
+                self.get_gpu_info = lambda: None
+                logging.warn('Can not use `nvidia-smi`, please check you `PATH` environment.')
         except Exception:
             self.get_gpu_info = lambda: None
             logging.warn('Can not use `nvidia-smi`, please check you `PATH` environment.')
@@ -113,5 +116,5 @@ class System(object):
     
 
 system_info = System()
-if system_info.get_gpu_info() is None:
-    system_info.debug = True
+# if system_info.get_gpu_info() is None:
+#     system_info.debug = True
