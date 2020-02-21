@@ -3,10 +3,10 @@ import subprocess
 import os, time, traceback
 import threading
 import logging
-
+import psutil
 
 class TaskStatus(object):
-    status2id = dict(zip(['CMD_ERROR', 'complete', 'waiting', 'running', 'runtime_error', 'killed'], range(-1, 5)))
+    status2id = dict(zip(['CMD_ERROR', 'complete', 'waiting', 'running', 'runtime_error', 'killed', 'paused'], range(-1, 5)))
     id2status = dict(zip(status2id.values(), status2id.keys()))
     
     can_start_list = ['waiting', 'runtime_error', 'killed']
@@ -65,13 +65,15 @@ class Sort(object):
     start_sort_type = {
         'waiting': 0,
         'runtime_error': 1,
+        'paused': 2,
         'killed': 2,
         'running': 3,
         'complete': 3,
         'CMD_ERROR': 3,
     }
     show_sort_type = {
-        'running': 1,
+        'running': 0,
+        'paused': 1,
         'waiting': 2,
         'killed': 3,
         'runtime_error': 3,
@@ -124,7 +126,8 @@ class Task(object):
         self.pkg_process = None
         self.process = None
         self.available = True
-
+        self.paused = False
+        
         self.killed = False
         self.debug_msg = None
         
@@ -178,6 +181,24 @@ class Task(object):
         else:
             return 1, f'[warning]: can not kill task {self.id} which have status `{self.status.status}`'
 
+    def pause(self):
+        if self.pid is not None:
+            if not self.paused:
+                psutil.Process(self.pid).suspend()
+                self.paused = True
+                return 0, f'[Info]: task {self.id} paused.'
+            return 1, f'[Warning]: task {self.id} have been paused before.'
+        return 1, f'[Error]: task {self.id} not running.'
+    
+    def resume(self):
+        if self.pid is not None:
+            if self.paused:
+                psutil.Process(self.pid).resume()
+                self.paused = False
+                return 0, f'[Info]: task {self.id} resume.'
+            return 1, f'[Warning]: task {self.id} is running.'
+        return 1, f'[Error]: task {self.id} not running.'
+    
     @property
     def status(self):
         if not self.available:
@@ -191,6 +212,8 @@ class Task(object):
         
         status = self.process.poll()
         if status is None:
+            if self.paused:
+                return TaskStatus('paused', self.run_times)
             return TaskStatus('running', self.run_times)
         
         if status == 0:
