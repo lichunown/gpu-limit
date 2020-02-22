@@ -71,6 +71,7 @@ class Sort(object):
         'complete': 3,
         'CMD_ERROR': 3,
     }
+    
     show_sort_type = {
         'running': 0,
         'paused': 1,
@@ -81,6 +82,15 @@ class Sort(object):
         'CMD_ERROR': 5,
     }
     
+    status_sort_type = {
+        'waiting': 0,
+        'runtime_error': 1,
+        'paused': 2,
+        'killed': 3,
+        'running': 4,
+        'complete': 5,
+        'CMD_ERROR': 6,
+    }
     sort_types = ['id', 'priority', 'show', 'run']
     
     def __call__(self, *args, **kwargs):
@@ -106,8 +116,7 @@ class Sort(object):
             return f'[Error]: can not found sort type `{type}`, which can only use {Sort.sort_types}'
 
         return tasks
-        
-        
+    
         
 class Task(object):
     def __init__(self, task_manage, id, pwd, cmds, out_path=None):
@@ -138,7 +147,7 @@ class Task(object):
             self.gpu = GPU_id
             env = os.environ.copy()
             env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
-            self.process = subprocess.Popen(self.cmds, stdout=self.out_file, shell=True, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
+            self.process = subprocess.Popen(' '.join(self.cmds), stdout=self.out_file, shell=True, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
             self.pid = self.process.pid
             logging.info(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         except Exception as e:

@@ -2,7 +2,7 @@ import abc
 import logging
 
 from .system_info import system_info
-from .tasks import TaskStatus
+from .tasks import TaskStatus, Sort
 
 class Scheduling(metaclass=abc.ABCMeta):
     
@@ -29,34 +29,40 @@ class BaseScheduling(Scheduling):
     
     @staticmethod
     def _use_gpu_id(info):
+        if not info.gpu:
+            return 0
         return sorted(info.gpu, key = lambda x: x.memory_free, reverse=True)[0].id
         
+    @staticmethod
+    def sort_for_timer_call(tasks):
+        tasks = sorted(tasks, key=lambda x: x.run_times)
+        tasks = sorted(tasks, key=lambda x: Sort.status_sort_type[x.status.status])
+        return tasks
+    
     def callback_process_end(self, task_manage, *args, **kwargs):
-        pass
+        if all([task.status.status != 'running' for task in task_manage.tasks]):
+            return self.timer_call(task_manage)
     
     def callback_add_process(self, task_manage, *args, **kwargs):
+        if all([task.status.status != 'running' for task in task_manage.tasks]):
+            if self.timer_call(task_manage):
+                return 0, 'start task.'
         return 0, ''
     
-    def timer_call(self, task_manage, *args, **kwargs):
+    def timer_call(self, task_manage):
         info = system_info.refresh()
-        if not info.gpu:
-            for task in task_manage.tasks:
-                if task.run_times > task_manage.setter_param['MAX_ERR_TIMES']:
-                    continue
-                if task.status.status in TaskStatus.auto_start_list:
-                    task.start(0)
-                    logging.info(f'start task {task.id}.')
-                    return True
-            return False
+        tasks = task_manage.tasks
+        tasks = self.sort_for_timer_call(tasks)
         
-        if info.gpu[self._use_gpu_id(info)].memory_free > task_manage.setter_param['MINI_MEM_REMAIN']:
-            for task in task_manage.tasks:
-                if task.run_times > task_manage.setter_param['MAX_ERR_TIMES']:
-                    continue
-                if task.status.status in TaskStatus.auto_start_list:
-                    task.start(self._use_gpu_id(info))
-                    logging.info(f'start task {task.id}.')
-                    return True
+        for task in tasks:
+            if task.run_times > task_manage.setter_param['MAX_ERR_TIMES']:
+                continue
+            if task.status.status in TaskStatus.auto_start_list:
+                gpu_id = self._use_gpu_id(info)
+                task.start(self._use_gpu_id(info))
+                logging.info(f'start task {task.id} in GPU({gpu_id}).')
+                return True
+    
         return False
     
     def user_start_scheduling(self, task_manage, task_id=None):
@@ -65,6 +71,7 @@ class BaseScheduling(Scheduling):
         
         task = task_manage.get_task(task_id)
         info = system_info.refresh()
+        gpu_id = self._use_gpu_id(info)
         
-        logging.info(f'start task {task.id}.')
-        return task.start(self._use_gpu_id(info))
+        logging.info(f'start task {task.id} in GPU({gpu_id}).')
+        return task.start(gpu_id)
