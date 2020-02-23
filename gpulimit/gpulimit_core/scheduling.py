@@ -35,6 +35,7 @@ class BaseScheduling(Scheduling):
         
     @staticmethod
     def sort_for_timer_call(tasks):
+        tasks = sorted(tasks, key=lambda x: x.priority)
         tasks = sorted(tasks, key=lambda x: x.run_times)
         tasks = sorted(tasks, key=lambda x: Sort.status_sort_type[x.status.status])
         return tasks
@@ -59,6 +60,8 @@ class BaseScheduling(Scheduling):
                 continue
             if task.status.status in TaskStatus.auto_start_list:
                 gpu_id = self._use_gpu_id(info)
+                if (task.run_times + 1) * task_manage.setter_param['MINI_MEM_REMAIN'] > info.gpu[gpu_id].memory_free:
+                    continue
                 task.start(self._use_gpu_id(info))
                 logging.info(f'start task {task.id} in GPU({gpu_id}).')
                 return True

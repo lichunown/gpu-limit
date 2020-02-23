@@ -280,7 +280,7 @@ def rm(id):
 
 
 @task_manage.client('clean')
-def clean(self, *args):
+def clean(*args):
     '''
         clean [type(default=None)]    remove complete task and CMD_ERROR task.
         
