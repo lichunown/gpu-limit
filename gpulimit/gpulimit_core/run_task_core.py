@@ -279,6 +279,38 @@ def rm(id):
         return 1, f'[error]: can not found {id} in task queue.'
 
 
+@task_manage.client('clean')
+def clean(self, *args):
+    '''
+        clean [type(default=None)]    remove complete task and CMD_ERROR task.
+        
+        Example:
+            
+            gpulimit clean            clean all `CMD_ERROR` `complete` status task
+            gpulimit clean kill       clean all `kill` status task
+    '''
+    if not args:
+        rm_types = ['CMD_ERROR', 'complete']
+    else:
+        rm_types = list(args)
+        
+    rm_tasks = []
+    for task in task_manage.tasks:
+        if task.status.status in rm_types:
+            rm_tasks.append(task)
+            
+    for task in rm_tasks:
+        task_manage.rm_task(task.id)
+        
+    table = pt.PrettyTable(['id', 'status', 'run_times', 'pwd', 'cmds'])
+    table.border = False
+    table.align = 'l'
+    for task in rm_tasks:
+        table.add_row([task.id, task.status.status, task.run_times, task.pwd, task.cmds])
+        
+    return 0, '[info]: rm task as follows:\n' + str(table)
+
+
 @task_manage.client('kill')
 def kill(id):
     '''
@@ -411,10 +443,10 @@ def status():
     table.add_row([all_info.CPU_utilization, all_info.memory.total, all_info.memory.free, all_info.memory.used])
     result += str(table)
     result += '\n\n'
-    table = pt.PrettyTable(['GPU[ID]', 'memory total', 'memory free', 'memory used', 'running tasks num'])
+    table = pt.PrettyTable(['GPU[ID]', 'memory total', 'memory free', 'memory used', 'utilization', 'running tasks num'])
     table.border = False
     for info, use_num in zip(gpu_data, task_nums):
-        table.add_row([info.id, info.memory_total, info.memory_free, info.memory_used, use_num])
+        table.add_row([info.id, info.memory_total, info.memory_free, info.memory_used, info.utilization, use_num])
     result += str(table)
     
     return 0, result
