@@ -15,6 +15,7 @@ git clone https://github.com/lichunown/gpu-limit.git
 cd gpu-limit
 python setup.py install
 ```
+
 ### pip 安装
 
 ```bash
@@ -95,27 +96,35 @@ gpulimit log [task id]
 gpulimit log main
 ```
 
+## scheduling
+
+整个系统调度抽为以下4种：
+
+- timer_call定时器：按照一定时间间隔运行
+- callback_process_end：单个任务结束回调函数
+- callback_add_process：用户添加任务时的回调函数
+- user_start_scheduling：用户强制运行任务调用
+
+task信息：
+
+- priority：default=5， 越小越优先
+- status
+  - 'CMD_ERROR'：命令本身有问题，python报错（仅在windows下）
+  -  'complete'：任务完成
+  - 'waiting'：等待调用
+  -  'running'：正在运行
+  - 'runtime_error'：任务在运行过程中出错，可能是显存爆了，也有可能是程序有问题
+  -  'killed'：被用户kill的正在运行的进程，用户可以通过start命令重启
+  - 'paused'：暂停的进程（暂停状态仍然占用GPU显存）
+- run_times：任务出错
+
 ## TODO list
 
 
 - [x] change raise type, and add `try except` for exception break.
-- [x]  \_\_doc\_\_
+- [x] \_\_doc\_\_
 - [ ] kill all, range
-- [ ] add commits
-- [ ] use priority queue as task_manage.queue
+- [x] add commits
+- [x] use priority queue as task_manage.queue
 - [ ] Improve scheduling aligorithm
-- [ ] 
-
-zhanxianyuan@jd.com
-
-zhang.junbo@jd.com
-
-zhangyue81@jd.com
-
-zhuxiangyu5@jd.com
-
-li.ming@jd.com
-
-yinhonglei@jd.com
-
-xuhaoran8@jd.com
+- [ ] catch memory error in cmds， when cmds is `python ...` and use`tf` or `pytorch`.
