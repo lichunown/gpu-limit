@@ -54,6 +54,11 @@ class TaskStatus(object):
             else:
                 raise ValueError(f'status name must be: {self.status2id}')
             
+    def __eq__(self, value):
+        if isinstance(value, str):
+            return self.status == value
+        raise ValueError(f'can not eq type:{type(value)}')
+        
     def __str__(self):
         return self.status
     
@@ -144,6 +149,7 @@ class Task(object):
         try:
             if self.out_path is not None:
                 self.out_file = open(self.out_path, 'w')
+            self.out_file.write(f'{self.pwd}# {self.cmds}\n')
             self.gpu = GPU_id
             env = os.environ.copy()
             env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
@@ -168,6 +174,8 @@ class Task(object):
     def start(self, GPU_id):
         if self.killed:
             self.killed = False
+        if self.paused:
+            return self.resume()
         if self.status.status in ['waiting', 'runtime_error', 'killed']:
             self.run_times += 1
             self.pkg_process = threading.Thread(target=self._run_task, args=(GPU_id,))
