@@ -106,3 +106,16 @@ gpulimit log main
 - [ ] Improve scheduling aligorithm
 - [ ] 
 
+zhanxianyuan@jd.com
+
+zhang.junbo@jd.com
+
+zhangyue81@jd.com
+
+zhuxiangyu5@jd.com
+
+li.ming@jd.com
+
+yinhonglei@jd.com
+
+xuhaoran8@jd.com
