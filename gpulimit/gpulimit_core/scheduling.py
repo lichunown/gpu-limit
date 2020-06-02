@@ -60,8 +60,8 @@ class BaseScheduling(Scheduling):
                 continue
             if task.status.status in TaskStatus.auto_start_list:
                 gpu_id = self._use_gpu_id(info)
-                if (task.run_times + 1) * task_manage.setter_param['MINI_MEM_REMAIN'] > info.gpu[gpu_id].memory_free:
-                    continue
+                if info.gpu[gpu_id].memory_free < info.gpu[gpu_id].memory_total / 2:
+                    break
                 task.start(self._use_gpu_id(info))
                 logging.info(f'start task {task.id} in GPU({gpu_id}).')
                 return True

@@ -1,9 +1,21 @@
 # -*- coding: utf-8 -*-
 import subprocess
 import os, time, traceback
+import signal
 import threading
 import logging
 import psutil
+
+
+def kill_process(pid):
+    if sys.platform == 'linux':
+        os.killpg(os.getpgid(pid), signal.SIGTERM)
+    else:
+        process = psutil.Process(pid)
+        for proc in process.children(recursive=True):
+            proc.kill()
+        process.kill()
+
 
 class TaskStatus(object):
     status2id = dict(zip(['CMD_ERROR', 'complete', 'waiting', 'running', 'runtime_error', 'killed', 'paused'], range(-1, 5)))
@@ -189,11 +201,12 @@ class Task(object):
         if self.process is not None and self.status.status == 'running':
             self.process.terminate()
             time.sleep(1)
-            self.process.kill()
+            kill_process(self.process.pid)
+
             self.killed = True
-            
             self.gpu = None
             self.pid = None
+
             return 0, f'[info]: kill task {self.id} succeed.'
         else:
             return 1, f'[warning]: can not kill task {self.id} which have status `{self.status.status}`'

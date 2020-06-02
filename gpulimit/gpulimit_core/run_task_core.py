@@ -53,7 +53,7 @@ class TaskManage(object):
         
         self.setter_param = {
             'MINI_MEM_REMAIN': 1024,
-            'MAX_ERR_TIMES': 5,
+            'MAX_ERR_TIMES': 1,
             'WAIT_TIME': 10,
         }
         
@@ -61,7 +61,7 @@ class TaskManage(object):
         self.lock = threading.RLock()
         
         
-    def start(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=5, WAIT_TIME=10):
+    def start(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=1, WAIT_TIME=10):
         """
         init setting, and start timer scheduling
         

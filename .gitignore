@@ -6,3 +6,4 @@ tmp/
 build/
 dist/
 gpulimit.egg-info/
+*idea/
