@@ -166,7 +166,7 @@ class Task(object):
             self.gpu = GPU_id
             env = os.environ.copy()
             env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
-            self.process = subprocess.Popen(' '.join(self.cmds), stdout=self.out_file, shell=True, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
+            self.process = subprocess.Popen(' '.join(self.cmds), stdout=self.out_file, shell=False, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
             self.pid = self.process.pid
             logging.info(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         except Exception as e:
@@ -202,7 +202,8 @@ class Task(object):
         if self.process is not None and self.status.status == 'running':
             self.process.terminate()
             time.sleep(1)
-            kill_process(self.process.pid)
+            self.process.kill()
+            # kill_process(self.process.pid)
 
             self.killed = True
             self.gpu = None
