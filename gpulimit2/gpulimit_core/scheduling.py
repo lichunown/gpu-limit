@@ -1,11 +1,13 @@
 import abc
 import logging
 
-from .system_info import system_info
-from .tasks import TaskStatus, Sort
+from .system_info import System
+from .tasks import Status
 
 class Scheduling(metaclass=abc.ABCMeta):
-    
+    def __init__(self):
+        self.param = {}
+        
     @abc.abstractmethod
     def callback_process_end(self, task_manage, *args, **kwargs):
         pass
