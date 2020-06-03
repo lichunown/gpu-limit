@@ -44,10 +44,6 @@ class TaskManage(object):
         self.logdir = None
         self.log_file = None
         
-
-        logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
-        logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
-
         self.func_map = {}
         self.scheduling = scheduling
         
@@ -78,7 +74,10 @@ class TaskManage(object):
                 path = os.path.join(logdir, logname) 
                 if os.path.isfile(path):
                     os.remove(path)
-                    
+
+        logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
+        logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
+
         self.setter_param = {
             'MINI_MEM_REMAIN': MINI_MEM_REMAIN,
             'MAX_ERR_TIMES': MAX_ERR_TIMES,
@@ -431,7 +430,6 @@ def status():
     '''
     all_info = system_info()
     gpu_data = all_info.gpu
-    
     
     task_nums = [0] * len(gpu_data)
     for task in task_manage.tasks:
