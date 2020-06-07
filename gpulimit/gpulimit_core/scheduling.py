@@ -56,7 +56,7 @@ class BaseScheduling(Scheduling):
         tasks = self.sort_for_timer_call(tasks)
         
         for task in tasks:
-            if task.run_times > task_manage.setter_param['MAX_ERR_TIMES']:
+            if task.run_times >= task_manage.setter_param['MAX_ERR_TIMES']:
                 continue
             if task.status.status in TaskStatus.auto_start_list:
                 gpu_id = self._use_gpu_id(info)
