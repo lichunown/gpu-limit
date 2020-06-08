@@ -118,6 +118,12 @@ task信息：
   - 'paused'：暂停的进程（暂停状态仍然占用GPU显存）
 - run_times：任务出错
 
+## V0.2.0
+
+- 重写status状态
+- 调整task调度
+- 简化调度算法
+
 ## TODO list
 
 

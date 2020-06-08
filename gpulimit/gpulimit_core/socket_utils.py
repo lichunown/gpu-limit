@@ -6,6 +6,7 @@ def send_all(sock, msg):
     sock.send(struct.pack('>Q', len(msg)))
     sock.sendall(msg)
     
+    
 def recv_all(sock, buffer_size=1024):
     msg_len = sock.recv(8)
     msg_len = struct.unpack('>Q', msg_len)[0]

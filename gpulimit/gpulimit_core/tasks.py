@@ -7,248 +7,195 @@ import threading
 import logging
 import psutil
 
+from gpulimit.utils import asyn
 
-def kill_process(pid):
-    if sys.platform == 'linux':
-        os.killpg(os.getpgid(pid), signal.SIGTERM)
-    else:
-        process = psutil.Process(pid)
-        for proc in process.children(recursive=True):
-            proc.kill()
-        process.kill()
-
-
-class TaskStatus(object):
-    status2id = dict(zip(['CMD_ERROR', 'complete', 'waiting', 'running', 'runtime_error', 'killed', 'paused'], range(-1, 5)))
-    id2status = dict(zip(status2id.values(), status2id.keys()))
+class Status(int):
+    _map = {
+        'waiting': 0,
+        'running': 1,
+        'complete': 2,
+        'runtime_error': 3,
+        'CMD_ERROR': 4,
+        'killed': 5,
+        'paused': 6,
+    }
     
-    can_start_list = ['waiting', 'runtime_error', 'killed']
-    auto_start_list = ['waiting', 'runtime_error']
+    _int2str = dict([(v, k) for k, v in _map.items()])
     
-    def __init__(self, status='waiting', run_times=0, err_code=None):
-        self._status = None
-        self.run_times = run_times
-        self.err_code = err_code
-        
-        if isinstance(status, int):
-            self._set_status_id(status)
-            
-        elif isinstance(status, str):
-            self._set_status_name(status)       
-            
-        else:
-            raise TypeError(f'status must be int or str, not {type(status)}')
+    _sort_show = dict(zip(['running', 'waiting', 'runtime_error', 'killed', 
+                           'complete', 'paused', 'CMD_ERROR'], range(7)))
+    
+    _sort_run = dict(zip(['waiting', 'runtime_error', 'paused', 'killed', 
+                           'complete', 'CMD_ERROR', 'running'], range(7)))
+    
+    def __new__(cls, status):
+        if isinstance(status, str):
+            status = cls._map[status]
+        if status not in cls._int2str:
+            raise ValueError
+        return super(Status, cls).__new__(cls, status)
     
     @property
-    def id(self):
-        return self.status2id[self.status]
+    def sort_show(self):
+        return self._sort_show[self.str]
     
-    @id.setter
-    def id(self, nid):
-        self._set_status_id(nid)
-        
     @property
-    def status(self):
-        return self._status
+    def sort_run(self):
+        return self._sort_run[self.str]
     
-    @status.setter
-    def status(self, new_status):
-        self._set_status_name(new_status)
-        
-    def _set_status_id(self, id):
-            if id in self.id2status:
-                self._status = self.id2status[id]
-            else:
-                raise ValueError(f'status id must be: {self.id2status}')
+    @property
+    def str(self):
+        return str(self)
     
-    def _set_status_name(self, name):
-            if name in self.status2id:
-                self._status = name
-            else:
-                raise ValueError(f'status name must be: {self.status2id}')
-            
-    def __eq__(self, value):
-        if isinstance(value, str):
-            return self.status == value
-        raise ValueError(f'can not eq type:{type(value)}')
-        
     def __str__(self):
-        return self.status
+        return self._int2str[self]
     
     def __repr__(self):
-        return f'TaskStatus({self.status})'
+        return f'Status({self.str})'
+
+   
+STATUS_RUNNING = Status('running')
+STATUS_WAITING = Status('waiting')
+STATUS_RUNTIME_ERROR = Status('runtime_error')
+STATUS_KILLED = Status('killed')
+STATUS_COMPLETE = Status('complete')
+STATUS_PAUSED = Status('paused')
+STATUS_CMD_ERROR = Status('CMD_ERROR')
 
 
-class Sort(object):
-    start_sort_type = {
-        'waiting': 0,
-        'runtime_error': 1,
-        'paused': 2,
-        'killed': 2,
-        'running': 3,
-        'complete': 3,
-        'CMD_ERROR': 3,
-    }
-    
-    show_sort_type = {
-        'running': 0,
-        'paused': 1,
-        'waiting': 2,
-        'killed': 3,
-        'runtime_error': 3,
-        'complete': 4,
-        'CMD_ERROR': 5,
-    }
-    
-    status_sort_type = {
-        'waiting': 0,
-        'runtime_error': 1,
-        'paused': 2,
-        'killed': 3,
-        'running': 4,
-        'complete': 5,
-        'CMD_ERROR': 6,
-    }
-    sort_types = ['id', 'priority', 'show', 'run']
-    
-    def __call__(self, *args, **kwargs):
-        return self.sort(*args, **kwargs)
-    
-    @staticmethod
-    def sort(tasks, type):
-        if type == 'run':
-            tasks = sorted(tasks, key=lambda x: x.id)
-            tasks = sorted(tasks, key=lambda x: Sort.start_sort_type[x.status.status])
-
-        elif type == 'show':
-            tasks = sorted(tasks, key=lambda x: x.id)
-            tasks = sorted(tasks, key=lambda x: Sort.show_sort_type[x.status.status])
-            
-        elif type == 'id':
-            tasks = sorted(tasks, key=lambda x: x.id)
-            
-        elif type == 'priority':
-            tasks = sorted(tasks, key=lambda x: x.id)
-            tasks = sorted(tasks, key=lambda x: x.priority)
-        else:
-            return f'[Error]: can not found sort type `{type}`, which can only use {Sort.sort_types}'
-
-        return tasks
-    
-        
 class Task(object):
-    def __init__(self, task_manage, id, pwd, cmds, out_path=None):
-        self.task_manage = task_manage
+    def __init__(self, id, pwd, cmds, priority=5, out_path=None, end_callback=None):
         self.id = id
         self.pwd = pwd
         self.cmds = cmds
+        self.priority = priority
         self.out_path = out_path
+        self.end_callback = end_callback
         
-        self.priority = None
-        self.pid = None
         self.gpu = None
+        self.start_time = None
+        self.end_time = None
         
         self.run_times = 0
+
         self.out_file = None
         self.pkg_process = None
         self.process = None
-        self.available = True
-        self.paused = False
         
-        self.killed = False
-        self.debug_msg = None
+        self.status = STATUS_WAITING
+        self.debug_msg = None # if cmd_error, save error msg
         
+        if self.end_callback is None:
+            self.end_callback = lambda: None
+            
+    def __repr__(self):
+        return f'[Task:({self.status})] {self.pwd}# {" ".join(self.cmds)}'
+    
+    @property
+    def pid(self):
+        if self.status == Status('running'):
+            return self.process.pid
+        return None
+
+    @property
+    def running_time(self):
+        if self.start_time is None:
+            return 0
+        end_time = time.time() if self.end_time is None else self.end_time
+        return end_time - self.start_time
+            
+    @staticmethod
+    def _change_gpu_id(inputs):
+        if isinstance(inputs, (int, float, str)):
+            return str(inputs) 
+        if isinstance(inputs, (list, tuple)):
+            return str(inputs)[1: -1]
+
+    @asyn
     def _run_task(self, GPU_id):
+        self.start_time = time.time()
+        self.gpu = GPU_id
+        self.end_time = None
+        self.run_times += 1
+        self.status = STATUS_RUNNING
+        
         try:
             if self.out_path is not None:
                 self.out_file = open(self.out_path, 'w')
-            self.out_file.write(f'{self.pwd}# {self.cmds}\n')
-            self.gpu = GPU_id
+                self.out_file.write(f'{self.pwd}# {self.cmds}\n')
             env = os.environ.copy()
-            env['CUDA_VISIBLE_DEVICES'] = str(GPU_id)
-            self.process = subprocess.Popen(self.cmds, stdout=self.out_file, shell=False, stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
-            self.pid = self.process.pid
-            logging.info(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
+            env['CUDA_VISIBLE_DEVICES'] = self._change_gpu_id(GPU_id)
+            self.process = subprocess.Popen(self.cmds, stdout=self.out_file, shell=False,
+                                            stderr=subprocess.STDOUT, cwd=self.pwd, env=env)
+            
         except Exception as e:
-            self.available = False
+            self.status = STATUS_CMD_ERROR
             logging.info(f'[CMD_ERROR({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds} \nerror:\n{e}')
             msg = traceback.format_exc()
             logging.info(msg)
             self.debug_msg = 'cmds: ' + str(self.cmds) + "\n" + msg
-            self.task_manage.scheduling.callback_process_end(self.task_manage)
+            self.end_callback()
             return
-        self.process.wait()
-        self.gpu = None
-        self.pid = None
-        logging.info(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
         
-        self.task_manage.scheduling.callback_process_end(self.task_manage)
+        logging.info(f'[starting({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
+        self.process.wait()
+        
+        self.end_time = time.time()
+        self.gpu = None
+        
+        if self.status == STATUS_RUNNING: # status is killed, pass
+            if self.process.poll() == 0:
+                self.status = STATUS_COMPLETE
+            else:
+                self.status = STATUS_RUNTIME_ERROR
+        
+        logging.info(f'[finish({self.id}: GPU:{GPU_id})]: {self.pwd}$ {self.cmds}')
+        self.end_callback()
 
     def start(self, GPU_id):
-        if self.killed:
-            self.killed = False
-        if self.paused:
+        if self.status == STATUS_PAUSED:
             return self.resume()
-        if self.status.status in ['waiting', 'runtime_error', 'killed']:
-            self.run_times += 1
-            self.pkg_process = threading.Thread(target=self._run_task, args=(GPU_id,))
-            self.pkg_process.start()
-            
+        if self.status in [STATUS_WAITING, STATUS_RUNTIME_ERROR, STATUS_KILLED]:
+            self._run_task(GPU_id)
             return 0, f'[info]: start task {self.id} succeed.'
         else:
-            return 1, f'[info]: can not start task {self.id} which have status `{self.status.status}`'
-        
-    def kill(self):
-        if self.process is not None and self.status.status == 'running':
-            self.process.terminate()
-            time.sleep(1)
-            self.process.kill()
-            # kill_process(self.process.pid)
+            return 1, f'[info]: can not start task {self.id} which have status `{self.status}`'
+   
+    @asyn
+    def _kill(self):
+        self.process.terminate()
+        time.sleep(5)
+        self.process.kill()
 
-            self.killed = True
+    def kill(self):
+        if self.process is not None and self.status == STATUS_RUNNING:
+            self._kill()
             self.gpu = None
-            self.pid = None
+            self.status = STATUS_KILLED
 
             return 0, f'[info]: kill task {self.id} succeed.'
         else:
-            return 1, f'[warning]: can not kill task {self.id} which have status `{self.status.status}`'
+            return 1, f'[warning]: can not kill task {self.id} which have status `{self.status}`'
 
     def pause(self):
         if self.pid is not None:
-            if not self.paused:
+            if self.status != STATUS_PAUSED:
                 psutil.Process(self.pid).suspend()
-                self.paused = True
+                self.status = STATUS_PAUSED
                 return 0, f'[Info]: task {self.id} paused.'
             return 1, f'[Warning]: task {self.id} have been paused before.'
         return 1, f'[Error]: task {self.id} not running.'
     
     def resume(self):
         if self.pid is not None:
-            if self.paused:
+            if self.status == STATUS_PAUSED:
                 psutil.Process(self.pid).resume()
-                self.paused = False
+                self.status = STATUS_RUNNING
                 return 0, f'[Info]: task {self.id} resume.'
             return 1, f'[Warning]: task {self.id} is running.'
         return 1, f'[Error]: task {self.id} not running.'
+
+
+if __name__ == '__main__':
+    a = Task(0, './', ['sleep', '45'])
     
-    @property
-    def status(self):
-        if not self.available:
-            return TaskStatus('CMD_ERROR', self.run_times)
-        
-        if self.process is None:
-            return TaskStatus('waiting', self.run_times)
-        
-        if self.killed:
-            return TaskStatus('killed', self.run_times)
-        
-        status = self.process.poll()
-        if status is None:
-            if self.paused:
-                return TaskStatus('paused', self.run_times)
-            return TaskStatus('running', self.run_times)
-        
-        if status == 0:
-            return TaskStatus('complete', self.run_times)
-        else:
-            return TaskStatus('runtime_error', self.run_times, err_code=status)

@@ -1,11 +1,14 @@
 import abc
 import logging
 
-from .system_info import system_info
-from .tasks import TaskStatus, Sort
+from .system_info import System
+from .tasks import Status, STATUS_WAITING, STATUS_RUNTIME_ERROR
+
 
 class Scheduling(metaclass=abc.ABCMeta):
-    
+    def __init__(self):
+        self.param = {}
+        
     @abc.abstractmethod
     def callback_process_end(self, task_manage, *args, **kwargs):
         pass
@@ -25,46 +28,47 @@ class Scheduling(metaclass=abc.ABCMeta):
     
 class BaseScheduling(Scheduling):
     def __init__(self):
-        pass
-    
-    @staticmethod
-    def _use_gpu_id(info):
-        if not info.gpu:
-            return 0
-        return sorted(info.gpu, key = lambda x: x.memory_free, reverse=True)[0].id
+        self.param = {
+            'MAX_ERR_TIMES': 1,
+            'SAFETY_KEEP_MEMORY': 0.2,
+            'SAFETY_KEEP_GPU_MEMORY': 0.5,
+        }
         
     @staticmethod
     def sort_for_timer_call(tasks):
         tasks = sorted(tasks, key=lambda x: x.priority)
         tasks = sorted(tasks, key=lambda x: x.run_times)
-        tasks = sorted(tasks, key=lambda x: Sort.status_sort_type[x.status.status])
+        tasks = sorted(tasks, key=lambda x: x.status.sort_run)
         return tasks
     
     def callback_process_end(self, task_manage, *args, **kwargs):
-        if all([task.status.status != 'running' for task in task_manage.tasks]):
-            return self.timer_call(task_manage)
+        pass
     
     def callback_add_process(self, task_manage, *args, **kwargs):
-        if all([task.status.status != 'running' for task in task_manage.tasks]):
-            if self.timer_call(task_manage):
-                return 0, 'start task.'
         return 0, ''
     
     def timer_call(self, task_manage):
-        info = system_info.refresh()
+        gpu_id = System.best_select_gpu_id()
+        gpu = System.gpu(gpu_id)
+        memory = System.memory()
+        # print('timer_call: ', end='')
+        if gpu.free < self.param['SAFETY_KEEP_GPU_MEMORY'] * gpu.total:
+            # print('gpu.free return')
+            return False
+        
+        if memory.free < self.param['SAFETY_KEEP_MEMORY'] * memory.total:
+            # print('memory.free return')
+            return False
+        
         tasks = task_manage.tasks
         tasks = self.sort_for_timer_call(tasks)
         
         for task in tasks:
-            if task.run_times >= task_manage.setter_param['MAX_ERR_TIMES']:
+            if task.run_times > self.param['MAX_ERR_TIMES']:
                 continue
-            if task.status.status in TaskStatus.auto_start_list:
-                gpu_id = self._use_gpu_id(info)
-                if info.gpu[gpu_id].memory_free < info.gpu[gpu_id].memory_total / 2:
-                    break
-                if info.get_memory_info().free / info.get_memory_info().total < 0.2:
-                    break
-                task.start(self._use_gpu_id(info))
+            
+            if task.status in [STATUS_WAITING, STATUS_RUNTIME_ERROR]:
+                task.start(gpu_id)
                 logging.info(f'start task {task.id} in GPU({gpu_id}).')
                 return True
     
@@ -75,8 +79,7 @@ class BaseScheduling(Scheduling):
             return self.callback_add_process(task_manage)
         
         task = task_manage.get_task(task_id)
-        info = system_info.refresh()
-        gpu_id = self._use_gpu_id(info)
+        gpu_id = System.best_select_gpu_id()
         
         logging.info(f'start task {task.id} in GPU({gpu_id}).')
         return task.start(gpu_id)

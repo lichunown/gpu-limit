@@ -7,8 +7,8 @@ import heapq # TODO
 from gpulimit.utils import prettytable as pt
 from gpulimit.utils import check_input
 
-from .system_info import system_info
-from .tasks import Sort, Task
+from .system_info import System
+from .tasks import Task, STATUS_COMPLETE, STATUS_CMD_ERROR, Status
 from .scheduling import BaseScheduling
 
 
@@ -42,30 +42,38 @@ class TaskManage(object):
         self._id_give = 0
         
         self.logdir = None
-        self.log_file = None
-        
         self.func_map = {}
         self.scheduling = scheduling
         
-        self.setter_param = {
-            'MINI_MEM_REMAIN': 1024,
-            'MAX_ERR_TIMES': 1,
-            'WAIT_TIME': 10,
+        self._setter_param = {
+            'TIMER_POLLING_TIME': 10,
         }
+        
+        self._setter_param.update(self.scheduling.param)
         
         self.start_thread = threading.Thread(target=self._thread_start_task)
         self.lock = threading.RLock()
+        # print('init')
         
+    def set_param(self, k, v):
+        self._setter_param[k] = v
+        if k in self.scheduling.param:
+            self.scheduling.param[k] = v
+    
+    def get_param(self, k):
+        return self._setter_param[k]
+    
+    def get_params(self):
+        return self._setter_param.items()
         
-    def start(self, logdir='./tmp', MINI_MEM_REMAIN=1024, MAX_ERR_TIMES=1, WAIT_TIME=10):
+    def start(self, logdir='./tmp', **kwargs):
         """
         init setting, and start timer scheduling
         
         """
-    
-        self.logdir = logdir
-        self.log_file = os.path.join(self.logdir, 'main.log')
+        print('start')
         
+        self.logdir = logdir
         if not os.path.exists(logdir):
             os.makedirs(logdir)
         else:
@@ -73,27 +81,25 @@ class TaskManage(object):
             for logname in os.listdir(self.logdir):
                 path = os.path.join(logdir, logname) 
                 if os.path.isfile(path):
-                    os.remove(path)
+                    os.remove(path)   
+
+        self.log_file = os.path.join(self.logdir, 'main.log')
 
         logging.basicConfig(filename=self.log_file, level=logging.INFO, format='%(asctime)s - %(message)s')
         logging.basicConfig(filename=self.log_file, level=logging.WARNING, format='%(asctime)s - %(message)s')
 
-        self.setter_param = {
-            'MINI_MEM_REMAIN': MINI_MEM_REMAIN,
-            'MAX_ERR_TIMES': MAX_ERR_TIMES,
-            'WAIT_TIME': WAIT_TIME,
-        }
+
+        for k, v in kwargs.items():
+            self.set_param(k, v)
         
         self.start_thread.start()
         
         
     def _thread_start_task(self):
         while True:
-            result = self.scheduling.timer_call(self)
-            if result:
-                time.sleep(self.setter_param['WAIT_TIME'])
-            else:
-                time.sleep(1)
+            # print('call timer_call')
+            self.scheduling.timer_call(self)
+            time.sleep(self.get_param('TIMER_POLLING_TIME'))
     
     @property
     def tasks(self):
@@ -102,17 +108,9 @@ class TaskManage(object):
     def __len__(self):
         return len(self.queue)
     
-    def add_task(self, new_task, priority=5):
-        new_task.priority = priority
-        i = 0
-        for i, task in enumerate(self.queue):
-            if priority >= task.priority:
-                i = i + 1
-            if priority < task.priority:
-                break
-            
+    def add_task(self, new_task):
         self.lock.acquire()
-        self.queue.insert(i, new_task)
+        self.queue.append(new_task)
         self.lock.release()
     
     def get_task(self, id):
@@ -143,13 +141,38 @@ class TaskManage(object):
     
     def change_priority(self, id, priority):
         task = self.get_task(id)
-        if task is None:
-            return False
-        self.lock.acquire()
-        self.queue.remove(task)
-        self.lock.release()
-        self.add_task(task, priority)
+        task.priority = priority
         return True
+
+    
+    def add(self, pwd, cmds, *, priority:int=5, logpath=None):
+        '''
+        add [cmds]                    ls GPU task queue status
+        
+        Options:
+            
+            --priority [priority]     set task priority.
+            --logpath  [path]         set task output file path.
+        '''
+        priority = int(priority)
+        
+        def task_callback():
+            self.scheduling.callback_process_end(self)
+            
+        if logpath is None:
+            logpath = os.path.join(self.logdir, f'{self._id_give}.log')
+        
+        task = Task(self._id_give, pwd, cmds, priority, logpath, task_callback)
+        self._id_give += 1
+        self.add_task(task)
+        
+        result = f'add task(id:{task.id}) to queue(len: {len(self.queue)})'
+        logging.info(f'add task(id:{task.id}): {pwd}$ {cmds})')
+    
+        err, result_ = self.scheduling.callback_add_process(self)
+        
+        return err, '\n'.join([result, result_])
+    
     
     def client(self, client_cmd):
         """
@@ -172,38 +195,12 @@ class TaskManage(object):
             return func
         return decorator
     
-    def add(self, pwd, cmds, *, priority=5, logpath=None):
-        '''
-        add [cmds]                    ls GPU task queue status
-        
-        Options:
-            
-            --priority [priority]     set task priority.
-            --logpath  [path]         set task output file path.
-        '''
-        
-        if logpath is None:
-            logpath = os.path.join(self.logdir, f'{self._id_give}.log')
-            
-        task = Task(self, self._id_give, pwd, cmds, logpath)
-        self._id_give += 1
-        self.add_task(task, priority)
-        
-        result = f'add task(id:{task.id}) to queue(len: {len(self.queue)})'
-        logging.info(f'add task(id:{task.id}): {pwd}$ {cmds})')
-    
-        err, result_ = self.scheduling.callback_add_process(self)
-        
-        return err, '\n'.join([result, result_])
-    
-    
-
 
 task_manage = TaskManage(BaseScheduling())
 
 
 @task_manage.client('ls')
-def ls(*, all=False, sort='show'):
+def ls(*, all=False):
     '''
         ls                            ls GPU task queue status
         
@@ -215,12 +212,9 @@ def ls(*, all=False, sort='show'):
                                       can use: ['id', 'priority', 'show', 'run']
     '''
     
-    (all, sort), err_msg = check_input(((all, bool), (sort, str)))
+    (all,), err_msg = check_input(((all, bool), ))
     if err_msg: return 1, err_msg
-    
-#    print(sort)
-    tasks = Sort.sort(task_manage.tasks, sort)
-    if not isinstance(tasks, list): return 1, tasks
+    tasks = task_manage.tasks
     
     table = pt.PrettyTable(['[ID]', 'num', 'status', 'run_times', 'pwd', 'cmds'])
     table.border = False
@@ -230,7 +224,7 @@ def ls(*, all=False, sort='show'):
             table.add_row([task.id, i, status, task.run_times, task.pwd+'#', " ".join(task.cmds)[:80]])
         else:
             table.add_row([task.id, i, status, task.run_times, task.pwd+'#', " ".join(task.cmds)])
-#    print(str(table))
+
     return 0, str(table)
 
 
@@ -256,12 +250,13 @@ def show(id):
     table.add_row(['task pid:', task.pid])
     table.add_row(['priority:', task.priority])
     table.add_row(['use gpu:', task.gpu])
-    table.add_row(['error times:', task.run_times])
-    table.add_row(['status:', task.status.status])
+    table.add_row(['run times:', task.run_times])
+    table.add_row(['status:', task.status])
     table.add_row(['out file:', task.out_path])
     table.add_row(['pwd:', task.pwd])
     table.add_row(['cmds:', " ".join(task.cmds)])
     return 0, str(table)
+
 
 @task_manage.client('rm')
 def rm(id):
@@ -289,13 +284,13 @@ def clean(*args):
             gpulimit clean kill       clean all `kill` status task
     '''
     if not args:
-        rm_types = ['CMD_ERROR', 'complete']
+        rm_types = [STATUS_COMPLETE, STATUS_CMD_ERROR]
     else:
-        rm_types = list(args)
+        rm_types = [Status(i) for i in args]
         
     rm_tasks = []
     for task in task_manage.tasks:
-        if task.status.status in rm_types:
+        if task.status in rm_types:
             rm_tasks.append(task)
             
     for task in rm_tasks:
@@ -305,7 +300,7 @@ def clean(*args):
     table.border = False
     table.align = 'l'
     for task in rm_tasks:
-        table.add_row([task.id, task.status.status, task.run_times, task.pwd, task.cmds])
+        table.add_row([task.id, task.status, task.run_times, task.pwd, ' '.join(task.cmds)])
         
     return 0, '[info]: rm task as follows:\n' + str(table)
 
@@ -329,7 +324,7 @@ def kill(id):
 @task_manage.client('mv') 
 def mv(id, index=0, *args, **kwargs):
     '''
-        move [id] [index(default=0)]  move [id] to [index]
+        mv [id] [index(default=0)]    move [id] to [index]
     '''
     (id, index), err_msg = check_input(((id, int),(index, int)), args, kwargs)
     if err_msg:
@@ -361,14 +356,14 @@ def set_property(name=None, value=None):
             gpulimit set WAIT_TIME 1  set `WAIT_TIME=1`
     '''
     if name is None:
-        return 0, '\n'.join([f'{k} = {v}' for k,v in task_manage.setter_param.items()])
+        return 0, '\n'.join([f'{k} = {v}' for k,v in task_manage.get_params()])
     
-    if name in task_manage.setter_param:
+    if name in list(zip(*task_manage.get_params()))[0]:
         if value is None:
-            return 0, f'{name} = {task_manage.setter_param[name]}'
+            return 0, f'{name} = {task_manage.get_param(name)}'
         
         value = int(value)
-        task_manage.setter_param[name] = value
+        task_manage.set_param(name, value)
         result = 0, f'[info]: seted {name} = {value}'
     else:
         result = 1, f'[error]: name `{name}` can not set.'
@@ -428,23 +423,24 @@ def status():
             
             Nothing
     '''
-    all_info = system_info()
-    gpu_data = all_info.gpu
+    gpus = System.gpus()
+    memory = System.memory()
     
-    task_nums = [0] * len(gpu_data)
+    task_nums = [0] * len(gpus)
     for task in task_manage.tasks:
-        if task.gpu:
-            task_nums[task.gpu] += 1
+        if task.gpu is not None:
+            task_nums[int(task.gpu)] += 1
+    
     result = ''
     table = pt.PrettyTable(['CPU utilization', 'memory total', 'memory free', 'memory used'])
     table.border = False
-    table.add_row([all_info.CPU_utilization, all_info.memory.total, all_info.memory.free, all_info.memory.used])
+    table.add_row(['None', memory.total, memory.free, memory.used])
     result += str(table)
     result += '\n\n'
     table = pt.PrettyTable(['GPU[ID]', 'memory total', 'memory free', 'memory used', 'utilization', 'running tasks num'])
     table.border = False
-    for info, use_num in zip(gpu_data, task_nums):
-        table.add_row([info.id, info.memory_total, info.memory_free, info.memory_used, info.utilization, use_num])
+    for info, use_num in zip(gpus, task_nums):
+        table.add_row([info.id, info.total, info.free, info.used, 'None', use_num])
     result += str(table)
     
     return 0, result
@@ -469,5 +465,7 @@ def debug(id):
     
     return 0, str(task.debug_msg)
 
+
+        
 
         

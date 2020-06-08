@@ -1,16 +1,18 @@
 #!/usr/bin/env python3
 
-from setuptools import setup, find_packages
+import os
 import sys
+from setuptools import setup, find_packages
 
 
-with open("readme.md", "r", encoding='utf8') as fh:
+
+with open(os.path.join(os.path.split(__file__)[0], "readme.md"), "r", encoding='utf8') as fh:
     long_description = fh.read()
 
 
 setup(
     name='gpulimit',
-    version="0.1.5",
+    version="0.2.1",
     author="lcy",
     author_email="lichunyang_1@outlook.com",
     description=("DL training on GPU management"),
