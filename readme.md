@@ -1,12 +1,14 @@
-# GPU limit management
+# gpulimit: 使用GPU（机器学习算法）的任务队列管理
 
-机器学习领域的一些实验，由于参数较多，通常需要对不同参数跑多组实验。
+这是一个任务队列自动调度的程序。
 
-本项目维护使用GPU程序的任务队列，动态调度任务。避免手动跑实验带来的繁琐感受。
+研究机器学习算法，针对不同参数，常常需要跑多组实验。而机器学习的算法通常占用大量的内存、显存。通常无法同时运行多组程序。
+
+**本调度程序可以自动安排不同GPU上的任务数量，自动调度，同时提供前端管理界面，供手动管理。**
+
+
 
 ## install
-
-代码还在大改中，bug仍很多。。。
 
 ### 源码安装
 
@@ -17,6 +19,8 @@ python setup.py install
 ```
 
 ### pip 安装
+
+本项目已上传pypi，可直接通过pip安装
 
 ```bash
 pip3 install gpulimit
@@ -70,6 +74,8 @@ GPU Task Manage:
 gpulimit add [cmds]
 # for example
 # gpulimit add python3 main.py --lambda=12 --alpha=1
+gpulimit add --priority=1 [cmds] # 改变添加任务优先级
+gpulimit add --logpath="./" [cmds] # 重定向任务输出（默认在/tmp/gpulimit下）
 ```
 
 #### 查看任务
@@ -81,7 +87,7 @@ gpulimit ls
 #### 查看任务信息
 
 ```bash
-gpulimit ls
+gpulimit show [id]
 ```
 
 #### 查看任务输出日志
@@ -95,6 +101,17 @@ gpulimit log [task id]
 ```bash
 gpulimit log main
 ```
+#### 更改调度算法参数
+
+```bash
+gpulimit set # 查看现有参数
+gpulimit set [param name] [value]# 设置新参数
+```
+现有调度算法下，共有参数如下：
+- TIMER_POLLING_TIME：轮询时间
+- MAX_ERR_TIMES：最大运行次数（大于1的话，任务出错可重启）
+- SAFETY_KEEP_MEMORY：保留内存百分比（默认0.2），当内存超出80%时不再新添加任务
+- SAFETY_KEEP_GPU_MEMORY：针对单个显卡，保留显存的百分比（默认0.5），当显存超出50%时不再新添加任务
 
 ## scheduling
 
@@ -105,11 +122,15 @@ gpulimit log main
 - callback_add_process：用户添加任务时的回调函数
 - user_start_scheduling：用户强制运行任务调用
 
+
+目前调度算法为：
+- 仅仅进行轮询，有符合条件的任务的话，每次添加1个任务（**条件**参考**[更改调度算法参数]**部分）
+
 task信息：
 
 - priority：default=5， 越小越优先
 - status
-  - 'CMD_ERROR'：命令本身有问题，python报错（仅在windows下）
+  - 'CMD_ERROR'：命令本身有问题，python报错，可用`gpulimit debug [id]`查看报错信息
   -  'complete'：任务完成
   - 'waiting'：等待调用
   -  'running'：正在运行
@@ -132,5 +153,5 @@ task信息：
 - [ ] kill all, range
 - [x] add commits
 - [x] use priority queue as task_manage.queue
-- [ ] Improve scheduling aligorithm
+- [x] Improve scheduling aligorithm
 - [ ] catch memory error in cmds， when cmds is `python ...` and use`tf` or `pytorch`.
