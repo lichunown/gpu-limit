@@ -30,8 +30,9 @@ class BaseScheduling(Scheduling):
     def __init__(self):
         self.param = {
             'MAX_ERR_TIMES': 1,
+            'MAX_RUNNING_TASKS': -1,
             'SAFETY_KEEP_MEMORY': 0.2,
-            'SAFETY_KEEP_GPU_MEMORY': 0.5,
+            'SAFETY_KEEP_GPU_MEMORY': 0.6,
         }
         
     @staticmethod
@@ -61,10 +62,14 @@ class BaseScheduling(Scheduling):
             return False
         
         tasks = task_manage.tasks
+
+        if self.param['MAX_RUNNING_TASKS'] > 0 and self.param['MAX_RUNNING_TASKS'] >= sum([task.gpu==gpu_id for task in tasks]):
+            return False
+
         tasks = self.sort_for_timer_call(tasks)
         
         for task in tasks:
-            if task.run_times > self.param['MAX_ERR_TIMES']:
+            if task.run_times >= self.param['MAX_ERR_TIMES']:
                 continue
             
             if task.status in [STATUS_WAITING, STATUS_RUNTIME_ERROR]:

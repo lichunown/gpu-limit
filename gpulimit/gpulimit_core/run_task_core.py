@@ -361,8 +361,10 @@ def set_property(name=None, value=None):
     if name in list(zip(*task_manage.get_params()))[0]:
         if value is None:
             return 0, f'{name} = {task_manage.get_param(name)}'
-        
-        value = int(value)
+        try:
+            value = int(value)
+        except Exception:
+            value = float(value)
         task_manage.set_param(name, value)
         result = 0, f'[info]: seted {name} = {value}'
     else:
