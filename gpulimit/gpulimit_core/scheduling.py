@@ -63,7 +63,7 @@ class BaseScheduling(Scheduling):
         
         tasks = task_manage.tasks
 
-        if self.param['MAX_RUNNING_TASKS'] > 0 and self.param['MAX_RUNNING_TASKS'] >= sum([task.gpu==gpu_id for task in tasks]):
+        if 0 < self.param['MAX_RUNNING_TASKS'] <= sum([task.gpu==gpu_id for task in tasks]):
             return False
 
         tasks = self.sort_for_timer_call(tasks)
